@@ -1,0 +1,76 @@
+services:
+  # Lancer les vérifications de qualité (TypeScript, Linter, Tests Jest, Cohérence du projet)
+  check:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - gradle_cache:/root/.gradle
+    command: sh -c "npm install && npm run check"
+
+  # Compiler l'APK Android (Debug) et l'exporter dans le dossier local ./dist
+  build-apk:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - gradle_cache:/root/.gradle
+      - ./dist:/app/dist
+    command: >
+      sh -c "
+        npm install &&
+        node scripts/bootstrap-gradle-wrapper.mjs &&
+        cd android &&
+        chmod +x gradlew &&
+        ./gradlew assembleRelease assembleDebug &&
+        mkdir -p /app/dist &&
+        cp /app/android/app/build/outputs/apk/release/*.apk /app/dist/dsh-mobile.apk &&
+        cp /app/android/app/build/outputs/apk/debug/app-debug.apk /app/dist/dsh-mobile-debug.apk &&
+        echo '---------------------------------------------------------' &&
+        echo '✅ APK autonome généré avec succès : ./dist/dsh-mobile.apk' &&
+        echo '---------------------------------------------------------'
+      "
+
+  # Compiler l'APK Android (Release)
+  build-release:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - gradle_cache:/root/.gradle
+      - ./dist:/app/dist
+    command: >
+      sh -c "
+        npm install &&
+        node scripts/bootstrap-gradle-wrapper.mjs &&
+        cd android &&
+        chmod +x gradlew &&
+        ./gradlew assembleRelease &&
+        mkdir -p /app/dist &&
+        cp /app/android/app/build/outputs/apk/release/*.apk /app/dist/ 2>/dev/null || true &&
+        echo '---------------------------------------------------------' &&
+        echo '✅ Build Release terminé dans : ./dist/' &&
+        echo '---------------------------------------------------------'
+      "
+
+  # Serveur de développement Metro (pour connecter un appareil de test)
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    ports:
+      - '8081:8081'
+    command: sh -c "npm install && npm start -- --host 0.0.0.0"
+
+volumes:
+  node_modules:
+  gradle_cache:

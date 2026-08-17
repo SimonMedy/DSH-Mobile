@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: DeepSeek Harness upstream issues and discussions
+    url: https://github.com/deepseek-ai/deepseek-harness/discussions
+    about: Use upstream channels for bugs or feature requests that reproduce in the official DSH Web UI outside DSH Mobile.
