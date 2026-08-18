@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible DSH Mobile problem
+title: 'bug: '
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: DSH Mobile version
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: DeepSeek Harness version
+  - type: dropdown
+    attributes:
+      label: Platform
+      options: [Android, iOS]
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Network setup
+      description: Tailscale, reverse proxy, LAN, etc. Never include secrets.

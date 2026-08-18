@@ -1,0 +1,11 @@
+{
+  "extends": "@react-native/typescript-config",
+  "compilerOptions": {
+    "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "resolveJsonModule": true,
+    "types": ["jest", "nativewind/types"]
+  },
+  "include": ["App.tsx", "src", "__tests__", "nativewind-env.d.ts"]
+}

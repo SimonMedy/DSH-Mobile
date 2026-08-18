@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      react-native-toolchain:
+        patterns:
+          - react
+          - react-native
+          - '@react-native/*'
+          - '@react-native-community/*'
+      navigation:
+        patterns:
+          - '@react-navigation/*'
+          - react-native-screens
+          - react-native-safe-area-context
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3

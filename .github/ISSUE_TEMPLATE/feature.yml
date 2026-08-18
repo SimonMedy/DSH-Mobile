@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose a focused improvement to the DSH Mobile shell
+title: 'feat: '
+body:
+  - type: textarea
+    attributes:
+      label: Problem
+      description: What mobile-client problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful behavior, not just an implementation choice.
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Does the official DSH Web UI already provide this feature?
+      options:
+        - 'No'
+        - 'Yes, but mobile shell integration is needed'
+        - 'Unsure'
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Security / privacy considerations
+      description: Mention WebView, server credentials, native permissions, or remote-access implications if relevant.

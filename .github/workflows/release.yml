@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Build & Publish Android APKs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+
+      - name: Setup Java (Temurin 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [[ -f package-lock.json ]]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Bootstrap verified Gradle wrapper
+        run: npm run native:bootstrap:android
+
+      - name: Build Android Debug & Release APKs
+        run: |
+          chmod +x android/gradlew
+          ./android/gradlew -p android assembleDebug assembleRelease --no-daemon
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk dist/dsh-mobile-debug.apk
+          if compgen -G "android/app/build/outputs/apk/release/*.apk" > /dev/null; then
+            cp android/app/build/outputs/apk/release/*.apk dist/dsh-mobile-release.apk
+          fi
+          cd dist
+          sha256sum *.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload APKs as Workflow Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-mobile-apks
+          path: dist/*
+          retention-days: 14
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/dsh-mobile-debug.apk
+            dist/dsh-mobile-release.apk
+            dist/SHA256SUMS.txt
+          generate_release_notes: true

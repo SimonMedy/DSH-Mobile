@@ -1,0 +1,43 @@
+export const lightColors = {
+  background: '#F9F8F8',
+  backgroundSubtle: '#F1F2F4',
+  surface: '#FFFFFF',
+  surfaceRaised: '#FFFFFF',
+  surfacePressed: '#ECEEF1',
+  border: 'rgba(0, 0, 0, 0.08)',
+  borderStrong: 'rgba(0, 0, 0, 0.16)',
+  text: '#1E232C',
+  textSecondary: 'rgba(0, 0, 0, 0.65)',
+  textTertiary: 'rgba(0, 0, 0, 0.40)',
+  brand: '#4D6BFE',
+  brandDeep: '#3A65C2',
+  brandSoft: '#EDF2FE',
+  positive: '#22C55E',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  dangerSoft: '#FEF2F2',
+  overlay: 'rgba(15, 17, 21, 0.48)',
+} as const;
+
+export const darkColors = {
+  background: '#0A0A0A',
+  backgroundSubtle: '#121214',
+  surface: '#141416',
+  surfaceRaised: 'rgba(255, 255, 255, 0.06)',
+  surfacePressed: 'rgba(255, 255, 255, 0.12)',
+  border: 'rgba(255, 255, 255, 0.08)',
+  borderStrong: 'rgba(255, 255, 255, 0.18)',
+  text: '#FFFFFF',
+  textSecondary: 'rgba(255, 255, 255, 0.65)',
+  textTertiary: 'rgba(255, 255, 255, 0.40)',
+  brand: '#6799FE',
+  brandDeep: '#3A65C2',
+  brandSoft: 'rgba(103, 153, 254, 0.14)',
+  positive: '#4ED17E',
+  warning: '#F7AD31',
+  danger: '#F25A5A',
+  dangerSoft: 'rgba(242, 90, 90, 0.15)',
+  overlay: 'rgba(0, 0, 0, 0.62)',
+} as const;
+
+export type AppColors = typeof lightColors | typeof darkColors;

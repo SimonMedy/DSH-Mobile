@@ -1,0 +1,12 @@
+node_modules
+.git
+.gradle
+android/.gradle
+android/app/build
+ios/build
+ios/Pods
+dist
+coverage
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
