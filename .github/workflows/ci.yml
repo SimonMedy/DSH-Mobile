@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24.19.0'
       - name: Verify declared dependency policy
@@ -38,7 +38,7 @@ jobs:
     needs: quality
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24.19.0'
       - uses: actions/setup-java@v4
@@ -66,7 +66,7 @@ jobs:
     needs: quality
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24.19.0'
       - uses: ruby/setup-ruby@v1
