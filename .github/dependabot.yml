@@ -3,8 +3,8 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 3
     groups:
       react-native-toolchain:
         patterns:
@@ -21,5 +21,9 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 3
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      actions:
+        patterns:
+          - '*'
