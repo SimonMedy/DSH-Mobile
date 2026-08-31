@@ -10,7 +10,6 @@ YELLOW := \033[33m
 RESET  := \033[0m
 
 .PHONY: help check format build release dev clean local-install local-format local-check local-android local-ios
-
 ##@ 🚀 Containerized Commands (Recommended - Zero Config)
 
 check: ## Run full quality gate (lint, typecheck, tests, policy verification)
@@ -25,8 +24,8 @@ build: ## Build Android Debug APK and output to ./dist/dsh-mobile-debug.apk
 	@echo "$(CYAN)Building Android Debug APK in Docker container...$(RESET)"
 	docker compose run --rm build-apk
 
-release: ## Build Android Release APK and output to ./dist/
-	@echo "$(CYAN)Building Android Release APK in Docker container...$(RESET)"
+release: ## Build signed Android Release APK and output to ./dist/dsh-mobile.apk
+	@echo "$(CYAN)Building signed Android Release APK in Docker container...$(RESET)"
 	docker compose run --rm build-release
 
 dev: ## Start Metro bundler development server (port 8081)
@@ -41,7 +40,7 @@ clean: ## Clean local build artifacts and output directories
 
 local-install: ## Install JavaScript dependencies locally
 	@echo "$(CYAN)Installing npm dependencies...$(RESET)"
-	npm install
+	npm ci
 
 local-format: ## Format code locally
 	@echo "$(CYAN)Formatting code locally...$(RESET)"
@@ -73,7 +72,7 @@ help: ## Display this help message
 	@echo "  make check          Run full quality gate"
 	@echo "  make format         Auto-format all code with Prettier"
 	@echo "  make build          Build Android Debug APK in ./dist"
-	@echo "  make release        Build Android Release APK in ./dist"
+	@echo "  make release        Build signed Android Release APK in ./dist"
 	@echo "  make dev            Start Metro development server"
 	@echo "  make clean          Clean build artifacts"
 	@echo ""

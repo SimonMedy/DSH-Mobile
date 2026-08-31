@@ -8,12 +8,23 @@ react {
 
 def enableProguardInReleaseBuilds = true
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
+def releaseSigningProperties = [
+    'DSH_RELEASE_STORE_FILE',
+    'DSH_RELEASE_STORE_PASSWORD',
+    'DSH_RELEASE_KEY_ALIAS',
+    'DSH_RELEASE_KEY_PASSWORD',
+]
+def releaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.toLowerCase().contains('release')
+}
+def hasReleaseSigning = releaseSigningProperties.every {
+    project.hasProperty(it) && project.property(it).toString().trim()
+}
 
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
-
     namespace "dev.dshmobile"
     defaultConfig {
         applicationId "dev.dshmobile"
@@ -23,7 +34,6 @@ android {
         versionName "0.1.0"
         manifestPlaceholders = [usesCleartextTraffic: "true"]
     }
-
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -32,20 +42,18 @@ android {
             keyPassword 'android'
         }
         release {
-            if (project.hasProperty('DSH_RELEASE_STORE_FILE')) {
-                storeFile file(DSH_RELEASE_STORE_FILE)
-                storePassword DSH_RELEASE_STORE_PASSWORD
-                keyAlias DSH_RELEASE_KEY_ALIAS
-                keyPassword DSH_RELEASE_KEY_PASSWORD
-            } else {
-                storeFile file('debug.keystore')
-                storePassword 'android'
-                keyAlias 'androiddebugkey'
-                keyPassword 'android'
+            if (hasReleaseSigning) {
+                storeFile file(project.property('DSH_RELEASE_STORE_FILE'))
+                storePassword project.property('DSH_RELEASE_STORE_PASSWORD')
+                keyAlias project.property('DSH_RELEASE_KEY_ALIAS')
+                keyPassword project.property('DSH_RELEASE_KEY_PASSWORD')
+            } else if (releaseTaskRequested) {
+                throw new GradleException(
+                    'Release signing credentials are required. Refusing to build a release APK with the debug keystore.'
+                )
             }
         }
     }
-
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
@@ -61,7 +69,6 @@ android {
 
 dependencies {
     implementation("com.facebook.react:react-android")
-
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {
