@@ -51,7 +51,7 @@
     "@typescript-eslint/eslint-plugin": "8.36.0",
     "@typescript-eslint/parser": "8.36.0",
     "eslint": "8.57.1",
-    "eslint-plugin-jest": "28.14.0",
+    "eslint-plugin-jest": "29.16.5",
     "jest": "29.6.3",
     "prettier": "3.9.6",
     "prettier-plugin-tailwindcss": "0.8.1",
@@ -60,7 +60,7 @@
     "typescript": "5.8.3"
   },
   "overrides": {
-    "eslint-plugin-jest": "28.14.0"
+    "eslint-plugin-jest": "29.16.5"
   },
   "engines": {
     "node": ">=24.19.0 <25",
