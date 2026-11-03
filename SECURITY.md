@@ -1,5 +1,13 @@
 # Security policy
 
+## Important notice for Android v0.1.0 users
+
+The Android APK attached to the `v0.1.0` GitHub Release was produced while release builds could use the **public debug signing key**. That key is not a trustworthy publisher identity. Do not treat a matching Android signature alone as proof that an APK claiming to be DSH Mobile is authentic.
+
+**Do not install DSH Mobile APKs from unofficial mirrors or unsolicited update links.** The next release signed with a new, protected key may not install as an in-place update over v0.1.0: a one-time uninstall and reinstall may be required. Uninstalling may erase locally saved server profiles and WebView sessions; record non-secret server addresses before doing so, and never share credentials or token-bearing launch URLs.
+
+The repository's release pipeline has since been changed to reject builds without private release signing credentials. **This change does not retroactively repair the already distributed v0.1.0 APK.** No new signed replacement has been published as part of this notice. Read [Android signing migration guidance](docs/release-signing.md).
+
 ## Scope
 
 DSH Mobile is a client for user-operated DeepSeek Harness servers. A configured Harness can have powerful access to source code, shells, files, tools, models, and credentials on its host. Treat access to DSH as access to a development environment.
