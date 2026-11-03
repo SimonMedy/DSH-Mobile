@@ -35,7 +35,7 @@ describe('DSH Web startup link', () => {
       'https://user:password@harness.example/?token=abc',
       'https://harness.example/?token=abc#fragment',
       'javascript:alert(1)',
-      'https://harness.example/session/?token=abc',
+      'https://harness.example/session?token=abc',
       'https://harness.example/?token=',
     ]) {
       expect(() => parseHarnessLaunchLink(link)).toThrow();
