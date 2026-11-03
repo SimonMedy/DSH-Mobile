@@ -15,7 +15,7 @@ import {ServerEditorScreen} from './ServerEditorScreen';
 type Props = NativeStackScreenProps<RootStackParamList, 'ServerEditor'>;
 type SetupMode = 'choice' | 'manual' | 'pair';
 
-/** New server onboarding only. Existing profiles always keep the legacy editor. */
+/** Existing profiles keep their original editor and saved configuration. */
 export function ServerSetupScreen(props: Props) {
   const [mode, setMode] = useState<SetupMode>('choice');
   const {colors} = useAppTheme();
@@ -24,7 +24,12 @@ export function ServerSetupScreen(props: Props) {
     return <ServerEditorScreen {...props} />;
   }
   if (mode === 'pair') {
-    return <PairLinkScreen onBack={() => setMode('choice')} navigation={props.navigation} />;
+    return (
+      <PairLinkScreen
+        onBack={() => setMode('choice')}
+        navigation={props.navigation}
+      />
+    );
   }
   return (
     <Screen>
@@ -32,12 +37,25 @@ export function ServerSetupScreen(props: Props) {
         <Text style={{color: colors.text, fontSize: 25, fontWeight: '800'}}>
           Connect to Harness
         </Text>
-        <Text style={{color: colors.textSecondary, fontSize: 14, lineHeight: 21}}>
-          For recent DSH Web versions, use the private launch link printed by your server. Older installations can still be added manually.
+        <Text
+          style={{color: colors.textSecondary, fontSize: 14, lineHeight: 21}}>
+          For recent DSH Web versions, use the private launch link printed by
+          your server. Older installations can still be added manually.
         </Text>
-        <AppButton label="Pair using a DSH Web link" onPress={() => setMode('pair')} />
-        <AppButton label="Add server manually" tone="secondary" onPress={() => setMode('manual')} />
-        <AppButton label="Cancel" tone="ghost" onPress={() => props.navigation.goBack()} />
+        <AppButton
+          label="Pair using a DSH Web link"
+          onPress={() => setMode('pair')}
+        />
+        <AppButton
+          label="Add server manually"
+          tone="secondary"
+          onPress={() => setMode('manual')}
+        />
+        <AppButton
+          label="Cancel"
+          tone="ghost"
+          onPress={() => props.navigation.goBack()}
+        />
       </View>
     </Screen>
   );
@@ -60,29 +78,36 @@ function PairLinkScreen({
   const [name, setName] = useState('My Harness');
   const [input, setInput] = useState('');
   const [session, setSession] = useState<PairingSession>();
-  const [readyServerUrl, setReadyServerUrl] = useState<string>();
+  const [readyUrl, setReadyUrl] = useState<string>();
   const [error, setError] = useState<string>();
+  const inputStyle = {
+    color: colors.text,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+  };
 
   const start = () => {
     try {
       const parsed = parseHarnessLaunchLink(input);
-      // Clear native input before the token is handed to an ephemeral WebView.
       setInput('');
       setError(undefined);
-      setReadyServerUrl(undefined);
+      setReadyUrl(undefined);
       setSession(parsed);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Invalid launch link.');
+      setError(
+        caught instanceof Error ? caught.message : 'Invalid launch link.',
+      );
     }
   };
 
   const save = () => {
-    if (!readyServerUrl) return;
-    const existing = servers.find(server => server.url === readyServerUrl);
-    if (!existing) {
+    if (!readyUrl) return;
+    if (!servers.some(server => server.url === readyUrl)) {
       upsertServer({
         name: name.trim() || 'My Harness',
-        url: readyServerUrl,
+        url: readyUrl,
         isDefault: servers.length === 0,
       });
     }
@@ -92,13 +117,13 @@ function PairLinkScreen({
   const handleComplete = (currentUrl: string) => {
     if (!session) return;
     try {
-      // The upstream token exchange redirects to the clean application root.
+      const url = new URL(currentUrl);
+      if (url.search || url.hash) return;
       if (normalizeServerUrl(currentUrl) !== session.serverUrl) return;
-      if (new URL(currentUrl).search || new URL(currentUrl).hash) return;
-      setReadyServerUrl(session.serverUrl);
-      setSession(undefined); // Discard the credential and destroy this WebView.
+      setReadyUrl(session.serverUrl);
+      setSession(undefined);
     } catch {
-      // Navigations such as about:blank are not evidence of pairing.
+      // about:blank is not a successful pairing response.
     }
   };
 
@@ -108,10 +133,12 @@ function PairLinkScreen({
         <Text style={{color: colors.text, fontSize: 24, fontWeight: '800'}}>
           Pair your DSH Web session
         </Text>
-        <Text style={{color: colors.textSecondary, fontSize: 13.5, lineHeight: 20}}>
-          Copy the full private URL printed when you start DSH Web. Keep it secret. DSH Mobile stores only the server address, never the launch token.
+        <Text
+          style={{color: colors.textSecondary, fontSize: 13.5, lineHeight: 20}}>
+          Copy the full private URL printed when you start DSH Web. Keep it
+          secret. DSH Mobile stores only the server address, never the token.
         </Text>
-        {!session && !readyServerUrl ? (
+        {!session && !readyUrl ? (
           <>
             <TextInput
               accessibilityLabel="Private DSH Web launch link"
@@ -122,14 +149,16 @@ function PairLinkScreen({
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry
-              style={{color: colors.text, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 12}}
+              style={inputStyle}
             />
             <AppButton label="Connect securely" onPress={start} />
           </>
         ) : null}
         {session ? (
           <>
-            <Text style={{color: colors.textSecondary}}>Opening the temporary link securely…</Text>
+            <Text style={{color: colors.textSecondary}}>
+              Opening the temporary link securely…
+            </Text>
             <View style={{flex: 1, overflow: 'hidden', borderRadius: 12}}>
               <WebView
                 source={{uri: session.launchUrl}}
@@ -161,17 +190,20 @@ function PairLinkScreen({
                   }
                 }}
                 onError={() => {
-                  setError('Could not open the server. Check HTTPS, the hostname and your network.');
+                  setError(
+                    'Could not open the server. Check HTTPS, the hostname and your network.',
+                  );
                   setSession(undefined);
                 }}
               />
             </View>
           </>
         ) : null}
-        {readyServerUrl ? (
+        {readyUrl ? (
           <>
             <Text style={{color: colors.positive, fontWeight: '700'}}>
-              The server returned its clean launch page. Save this server to continue.
+              The server returned its clean launch page. Save this server to
+              continue.
             </Text>
             <TextInput
               accessibilityLabel="Server name"
@@ -179,7 +211,7 @@ function PairLinkScreen({
               onChangeText={setName}
               placeholder="My Harness"
               placeholderTextColor={colors.textTertiary}
-              style={{color: colors.text, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: 12}}
+              style={inputStyle}
             />
             <AppButton label="Save server" onPress={save} />
           </>
@@ -190,7 +222,7 @@ function PairLinkScreen({
           tone="ghost"
           onPress={() => {
             setSession(undefined);
-            setReadyServerUrl(undefined);
+            setReadyUrl(undefined);
             setInput('');
             onBack();
           }}

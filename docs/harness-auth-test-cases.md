@@ -1,28 +1,26 @@
-# Harness Web authentication: mobile compatibility cases
+# Harness Web authentication: mobile acceptance tests
 
-Reviewed on 2026-11-03. This is a test specification, **not** a claim that these scenarios already pass in DSH Mobile.
+Reviewed on 2026-11-03. This is a test plan, **not** proof of mobile compatibility.
 
-## Verified upstream contract
+## Upstream contract
 
-The [official Web profile documentation](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/bundle/web-app/README.md) describes a root launch URL with `?token=...`, a signed browser cookie, and a redirect to the clean server URL. The server enforces session authentication on its API and WebSocket connections, as well as Host/Origin trust for remote deployments. Treat both the launch URL and its token as bearer credentials until exchanged; do not persist or log them.
+The [official Web app documentation](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/bundle/web-app/README.md) describes a `?token=...` launch URL exchanged at the application root for an HttpOnly browser cookie, then a redirect to a clean URL. The server enforces session authentication and Host/Origin validation. A token-bearing URL is a credential: never log, persist or share it.
 
-## Required mobile tests before enabling pairing
+## Required validation on Android and iOS
 
-| Scenario | Expected client behavior |
-| --- | --- |
-| Fresh HTTPS launch link | WebView exchanges token at the allowed root, preserves the HttpOnly session cookie and navigates to the clean URL |
-| Previously saved v0.1.0 profile | No profile data or ID lost; ordinary URL continues to work with already authorized sessions |
-| Missing or expired cookie | Explain 401 and offer secure re-pairing, without injecting or overriding a session |
-| Invalid Host/Origin trust | Explain 403 and show server-side configuration guidance; never suppress the validation |
-| Invalid or reused token | No secret logging; clear retry guidance; no persistent token state |
-| Redirect outside configured origin | Do not follow an external URL inside the trusted WebView |
-| Cloudflare Tunnel and Tailscale | HTTPS reverse proxy with a trusted advertised hostname, correct cookie and WebSocket behavior |
-| Background, process restart and logout | Session remains subject to server expiry; explicit user action can clear site data |
-| Settings, Models and workspace chooser | Authorized upstream flows work without undocumented native bridges |
-| Repeated launches with changing localhost ports | Watch for cookie accumulation and HTTP 431; do not automatically erase unrelated users' sessions |
+- Fresh HTTPS token: load the allowed root, establish the session and follow the clean redirect without persisting the token.
+- Existing v0.1.0 server profile: retain its ID, name, URL and prior settings.
+- Missing or expired session (401): offer a safe re-pairing path without bypassing authentication.
+- Rejected Host/Origin (403): explain the server-side fix, never disable trust checks.
+- Invalid or reused token: fail safely and erase the temporary URL from client state.
+- Cross-origin redirect: never load an untrusted destination in the privileged WebView.
+- Cloudflare Tunnel and Tailscale: confirm HTTPS, trusted hostnames, cookies and WebSocket streaming.
+- Background and restart: respect session expiration, allow explicit logout/site-data clearing.
+- Models, Settings and workspaces: test actions authorized by the server without using private native bridges.
+- Repeated changing localhost ports: check for cookie accumulation and HTTP 431 without silently erasing unrelated sessions.
 
-Upstream user reports describe a potential HTTP 431 caused by many `dsh-auth-*` cookies when a desktop client repeatedly launches against changing `127.0.0.1` ports. This is not yet reproduced on DSH Mobile and must not be presented as an app bug without tests. See the [upstream report](https://github.com/deepseek-ai/deepseek-harness/discussions/11758).
+A [desktop-client upstream report](https://github.com/deepseek-ai/deepseek-harness/discussions/11758) describes potential HTTP 431 from accumulated `dsh-auth-*` cookies. It has **not** been reproduced in DSH Mobile.
 
-## Device verification record
+## Record evidence
 
-For every supported Harness release tested, record its exact version/commit, DSH Mobile build, Android/iOS platform version, deployment URL class (never secret URLs), HTTP status, WebSocket reconnection result, steps and screenshots with tokens removed. Run these tests on both platforms before publishing an app release that advertises pairing compatibility.
+For every tested Harness release, record its exact version, the DSH Mobile build, Android/iOS version, deployment type, HTTP status, WebSocket behavior, and redacted screenshots. Do not collect full launch links, tokens, cookies or private server addresses in public reports.
