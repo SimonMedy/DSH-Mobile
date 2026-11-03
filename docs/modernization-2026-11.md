@@ -1,70 +1,69 @@
 # DSH Mobile — November 2026 compatibility and security plan
 
-Status: working plan, **not** a claim that the app already supports the features below. Review date: 2026-11-03. Repository baseline: `main` at `31e0a9879e0fa870c33ca7f6dd80f27eedd2aa50`.
+Status: working plan, not a claim that the app already supports every feature below.
+
+Review date: 2026-11-03. Repository baseline: `main` at `31e0a9879e0fa870c33ca7f6dd80f27eedd2aa50`.
 
 ## Product contract
 
-Keep DSH Mobile an independent, small React Native shell around the unmodified upstream DeepSeek Harness Web UI. Preserve current saved server profiles and their IDs during upgrades. Prefer upstream UI fixes over injected DOM/CSS patches. Keep exact-origin navigation and the no-JavaScript-to-native-bridge boundary. Performance, accessibility, reliability and clear error messages matter as much as feature count.
+Keep DSH Mobile a small React Native shell around the unmodified upstream DeepSeek Harness Web UI. Preserve existing server profiles and IDs. Prefer upstream UI fixes over injected DOM or CSS patches. Preserve exact-origin navigation, the absence of a JavaScript-to-native bridge, and minimal telemetry. Reliability, performance, accessibility and clear errors are first-class requirements.
 
-## Upstream facts reviewed
+## Upstream sources and findings
 
-- Official Web UI documentation: https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/bundle/web-app/README.md
-- Browser auth and Host/Origin trust: https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/connection/README.md
-- Models and provider configuration: https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/guide/providers.md
-- Upstream remains a developer preview; do not assume stable private APIs.
+- [Official Web app](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/bundle/web-app/README.md)
+- [Browser authentication and trust](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/connection/README.md)
+- [Model and provider configuration](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/guide/providers.md)
 
-The current Web profile prints a launch link with `?token=...`. Its root exchanges that token for a signed, authority-bound, HttpOnly browser cookie and redirects to a clean URL. Requests without a valid cookie return 401; failed Host/Origin validation returns 403. The mobile app currently stores only clean server URLs and does not implement this initial exchange. This is a compatibility gap, not permission to bypass server-side authorization.
+The current Web profile prints a launch link containing `?token=...`. A request to the Web root exchanges that process credential for a signed, authority-bound, HttpOnly session cookie and redirects to a clean URL. Missing or invalid authentication can yield 401; invalid Host or Origin trust yields 403. DSH Mobile currently stores clean server URLs and lacks an initial pairing flow. Never bypass these server-side protections.
 
-The official Models settings page now supports model/provider configuration with secrets handled by the server. Some operations remain subject to server role/authority, provider type and version; a mobile wrapper cannot legitimately turn a server-side 403 into success. Workspace selection may vary by upstream release and remote deployment; test real mobile flows rather than assuming the August 2026 limitation is universal.
+The official Models settings page supports providers, model selection and server-managed credentials. Whether a particular operation works remotely depends on the upstream version, provider and security policy. Test the real mobile flow instead of assuming that the August 2026 restrictions are still universal.
 
-## Prioritized work and acceptance gates
+## P0 — Release safety and existing users
 
-### P0 — Protect existing users and the release channel
+1. Review and finish the separate release-signing PR #22 before publishing any new APK. Never distribute a release signed with the public debug keystore.
+2. Configure a permanent private Android signing key outside the repository. Verify the release certificate, non-debuggable APK and checksums. Do not commit secrets.
+3. Document how installations of `v0.1.0` move to the private key. A one-time uninstall and reinstall may be necessary due to Android signature incompatibility.
+4. Require successful quality, Android and iOS CI before releasing. Do not silently overwrite or remove previously published artifacts.
 
-1. Finish reviewing the already-open release-signing security PR #22; avoid duplicating it in this branch. Never distribute a public-key-signed release APK. Before the next release, configure a permanent private signing identity, verify its certificate, and document the `v0.1.0` install migration. Users on the old signer may need a one-time uninstall/reinstall; Android signing continuity cannot be guaranteed after a key change.
-2. Verify every release asset is non-debuggable, signed by the intended private key, reproducible enough to identify its source, and accompanied by a checksum. Require successful Android, iOS and quality CI before publication.
-3. Keep the old published release available only with clear risk/migration guidance until its distribution policy is explicitly decided; do not silently replace published binaries.
-4. No secrets, full launch links, API keys or session cookies in AsyncStorage, logs, analytics, crash breadcrumbs, or screenshots intentionally captured by the app.
+## P1 — Secure, intuitive connection
 
-### P1 — Compatible and intuitive login / connection
+1. Add temporary startup-link pairing. The pure `parseHarnessLaunchLink` helper and its regression tests are only a first step; the UI does **not** use them yet.
+2. Accept a DSH Web launch link only for its expected root token exchange. Never store or log a full launch URL, bearer token or session cookie in AsyncStorage, analytics, crash reports or persistent logs. Persist only the normalized server endpoint.
+3. Load the temporary link in the same-origin WebView, follow the clean redirect, let the platform retain its HttpOnly cookie, and discard the temporary link from app state as soon as practical. Do not trust external redirects in WebView.
+4. Test expired/reused tokens, 401 authentication failures, 403 Host/Origin rejection, remote HTTPS proxies, reconnects and process restarts.
+5. Provide a user-triggered **Clear browser sessions and website data** action on both platforms. AsyncStorage reset alone is not WebView logout.
+6. Explain TLS, offline, authentication and permission failures separately with actionable messages that never reveal secrets.
 
-1. Introduce an explicitly temporary launch-link pairing flow. `parseHarnessLaunchLink` is the first pure parser and regression test, **not yet hooked up to the UI**. Require HTTPS for remote public launches and allow explicitly trusted private/local HTTP endpoints. Treat the full link as a bearer secret in memory; persist only the normalized non-secret server address.
-2. WebView must load the original temporary URL for the authorized same-origin root exchange, follow the clean redirect, preserve the server cookie in platform site data, and then discard the temporary URL from React state/history on exit. Never accept arbitrary external redirects as trusted WebView navigation. Test expired/reused tokens, 401, 403, wrong authority, prefix proxy, restart, and offline/reconnect.
-3. Display separate actionable messages for: unreachable host, TLS error, 401 unauthenticated, 403 untrusted Host/Origin or forbidden operation, and server version mismatch. Do not expose private paths/credentials in error text.
-4. Add an explicit user-triggered **Clear browser sessions / site data** control with platform-appropriate tests. Do not equate AsyncStorage reset with cookie logout.
+## P1 — Settings, models and workspaces
 
-### P1 — Restore functionality without bypassing upstream boundaries
+1. After successful authentication, exercise Settings → Models, adding providers, API-key changes and model selection on Android and iOS.
+2. Check workspace selection, remote directory chooser, streams, WebSocket reconnect, external links, downloads, keyboard focus, safe areas, rotation and app background/restore.
+3. Test local, Tailscale and Cloudflare Tunnel HTTPS deployments. Do not defeat access controls, CORS, Host/Origin validation or certificate checks to make a screen appear to work.
+4. For any upstream host-only operation, show a clear limitation rather than using undocumented private APIs. Record the exact Harness version and reproduction steps.
 
-1. Test Settings → Models, changing API key, provider selection and model picker against a current Harness Web profile after authenticating. Record precise upstream version, client build, platform, request status and reproduction steps.
-2. Test workspace chooser, host file dialogs, streaming, WebSocket reconnect, external links, downloads, software keyboard, rotation, safe areas, and Cloudflare/Tailscale reverse proxies.
-3. Keep server-side permissions enforced. For host-local-only functionality, present an honest explanatory state and link to the official upstream workaround instead of shadow APIs or injected code.
+## P2 — Maintenance, performance and quality
 
-### P2 — Runtime and maintainability
+1. Upgrade React Native, WebView and native dependencies in separate compatible batches, not one speculative major upgrade. Require clean install, lint, types, unit tests, Android build, iOS build and device E2E for affected UI flows.
+2. Eliminate weak UUID randomness, type the WebView ref, and measure cold start, memory, WebView navigation and reconnect behavior before and after changes.
+3. Update `docs/known-limitations.md` and published compatibility notes only after validating a specific upstream release. Do not assert that every recent Harness version behaves identically.
+4. Keep telemetry minimal and opt-in where possible; redact token-bearing URLs from diagnostic output.
 
-1. Upgrade React Native, WebView, navigation and native dependencies in isolated compatibility batches; do not merge a failing Dependabot update. Require clean installation, lint, typecheck, Jest, Android build, iOS build and device-level WebView E2E for changed flows.
-2. Remove insecure random UUID fallback, type WebView refs, tighten session cleanup and lifecycle memory handling, and check WebView cache/performance behavior after upgrading.
-3. Update `docs/known-limitations.md` only after each restriction has been validated against a pinned upstream release. Add a supported-version matrix in release notes rather than making evergreen claims.
-4. Add an opt-in diagnostics screen without logging token-bearing URLs; keep default telemetry minimal.
+## P3 — Optional UX work
 
-### P3 — Optional enhancements after P0/P1
+Consider QR/deep-link pairing, improved downloads, background notifications and Superagent status only after secure basic login and browsing work. Never grant an unattended agent access to a user's Harness by default.
 
-QR/deep-link pairing, richer download flows, background notifications and Superagent-related status are candidates, not commitments. No unattended agent access to the user's Harness is added to the mobile app by default.
+## Release acceptance matrix
 
-## Test matrix before shipping
+Every affected flow needs testing on Android and iOS unless explicitly platform-specific:
 
-| Scenario | Android | iOS | Expected |
-| --- | --- | --- | --- |
-| Existing v0.1.0 local profiles migrate | Required | Required | No profile loss |
-| HTTPS launch-token first sign-in and clean redirect | Required | Required | No token persisted |
-| Reopen and expire session | Required | Required | Re-pair guidance |
-| Invalid token / 401 | Required | Required | Clear retry/pairing action |
-| Host/Origin mismatch / 403 | Required | Required | No unsafe fallback |
-| Settings and Models management | Required | Required | Upstream-permitted operations work |
-| Workspace selection and session streaming | Required | Required | No broken navigation/WebSocket |
-| Cloudflare/Tailscale HTTPS proxy | Required | Required | Secure connection, no bypass |
-| External link, file download, keyboard, background/restore | Required | Required | Predictable native behavior |
-| APK signature / upgrade from 0.1.0 | Required | N/A | Migration instructions match reality |
+- Existing v0.1.0 server profiles survive the app update without losing configuration.
+- HTTPS token pairing redirects to the clean URL without storing the token.
+- Missing/expired credentials result in safe re-pairing guidance.
+- A 403 never triggers an unsafe Host/Origin bypass.
+- Models, settings, workspace chooser and session streaming work when permitted by Harness.
+- Reverse proxies, back navigation, external links, downloads, keyboard and resume behave predictably.
+- Android APK identity is verified against the intended protected release certificate, with a documented migration path from v0.1.0.
 
 ## Delivery policy
 
-Use work branches and reviewable PRs. Reuse PR #22 as the release-hardening dependency. Never merge, publish a release, alter GitHub secrets or delete published artifacts without explicit user authorization. This document is a work plan: any untested runtime behavior must remain marked unverified until CI plus device testing prove it.
+Use work branches and reviewable PRs. Treat PR #22 as the separate release-security prerequisite. No merges, releases, secret management or deletion of published assets without explicit owner authorization. Mark untested runtime behavior as unverified until CI and device validation are complete.
