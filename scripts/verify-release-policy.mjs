@@ -25,7 +25,10 @@ check(
   'release build must require a complete signing identity',
 );
 
-check(!release.includes('assembleDebug'), 'release pipeline must not build debug APKs');
+check(
+  !release.includes('assembleDebug'),
+  'release pipeline must not build debug APKs',
+);
 check(
   !release.includes('dsh-mobile-debug.apk'),
   'release pipeline must not publish debug APKs',
@@ -41,11 +44,14 @@ check(
   'publish must depend on verified build and a release tag',
 );
 
-for (const [name, workflow] of [
+const workflows = [
   ['CI', ci],
   ['release', release],
-]) {
-  const actions = [...workflow.matchAll(/^\s*-?\s*uses:\s*[^@\s]+@([^\s#]+)/gm)];
+];
+for (const [name, workflow] of workflows) {
+  const actions = [
+    ...workflow.matchAll(/^\s*-?\s*uses:\s*[^@\s]+@([^\s#]+)/gm),
+  ];
   check(actions.length > 0, `${name} has no pinned actions to verify`);
   for (const [, revision] of actions) {
     check(
