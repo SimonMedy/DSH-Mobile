@@ -8,9 +8,9 @@ services:
       - .:/app
       - node_modules:/app/node_modules
       - gradle_cache:/root/.gradle
-    command: sh -c "npm install && npm run check"
+    command: sh -c "npm ci && npm run check"
 
-  # Compiler l'APK Android (Debug) et l'exporter dans le dossier local ./dist
+  # Compiler l'APK Android Debug et l'exporter dans le dossier local ./dist
   build-apk:
     build:
       context: .
@@ -22,23 +22,28 @@ services:
       - ./dist:/app/dist
     command: >
       sh -c "
-        npm install &&
+        npm ci &&
         node scripts/bootstrap-gradle-wrapper.mjs &&
         cd android &&
         chmod +x gradlew &&
-        ./gradlew assembleRelease &&
+        ./gradlew assembleDebug &&
         mkdir -p /app/dist &&
-        cp /app/android/app/build/outputs/apk/release/*.apk /app/dist/dsh-mobile.apk &&
+        cp /app/android/app/build/outputs/apk/debug/app-debug.apk /app/dist/dsh-mobile-debug.apk &&
         echo '---------------------------------------------------------' &&
-        echo '✅ APK autonome généré avec succès : ./dist/dsh-mobile.apk' &&
+        echo '✅ APK Debug généré avec succès : ./dist/dsh-mobile-debug.apk' &&
         echo '---------------------------------------------------------'
       "
 
-  # Compiler l'APK Android (Release)
+  # Compiler un APK Android Release signé. Les propriétés DSH_RELEASE_* sont obligatoires.
   build-release:
     build:
       context: .
       dockerfile: Dockerfile
+    environment:
+      - ORG_GRADLE_PROJECT_DSH_RELEASE_STORE_FILE
+      - ORG_GRADLE_PROJECT_DSH_RELEASE_STORE_PASSWORD
+      - ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_ALIAS
+      - ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_PASSWORD
     volumes:
       - .:/app
       - node_modules:/app/node_modules
@@ -46,15 +51,15 @@ services:
       - ./dist:/app/dist
     command: >
       sh -c "
-        npm install &&
+        npm ci &&
         node scripts/bootstrap-gradle-wrapper.mjs &&
         cd android &&
         chmod +x gradlew &&
         ./gradlew assembleRelease &&
         mkdir -p /app/dist &&
-        cp /app/android/app/build/outputs/apk/release/*.apk /app/dist/ 2>/dev/null || true &&
+        cp /app/android/app/build/outputs/apk/release/*.apk /app/dist/dsh-mobile.apk &&
         echo '---------------------------------------------------------' &&
-        echo '✅ Build Release terminé dans : ./dist/' &&
+        echo '✅ APK Release signé généré : ./dist/dsh-mobile.apk' &&
         echo '---------------------------------------------------------'
       "
 
@@ -68,7 +73,7 @@ services:
       - node_modules:/app/node_modules
     ports:
       - '8081:8081'
-    command: sh -c "npm install && npm start -- --host 0.0.0.0"
+    command: sh -c "npm ci && npm start -- --host 0.0.0.0"
 
 volumes:
   node_modules:

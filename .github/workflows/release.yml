@@ -6,73 +6,132 @@ on:
       - 'v*'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-apk:
-    name: Build & Publish Android APKs
+    name: Build signed Android release APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      ORG_GRADLE_PROJECT_DSH_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+      ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24.19.0'
 
       - name: Setup Java (Temurin 17)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
 
       - name: Install dependencies
-        shell: bash
-        run: |
-          if [[ -f package-lock.json ]]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-audit --no-fund
-          fi
+        run: npm ci --no-audit --no-fund
 
       - name: Bootstrap verified Gradle wrapper
         run: npm run native:bootstrap:android
 
-      - name: Build Android Debug & Release APKs
+      - name: Configure release signing
+        shell: bash
         run: |
+          set -euo pipefail
+          for name in \
+            ANDROID_RELEASE_KEYSTORE_BASE64 \
+            ORG_GRADLE_PROJECT_DSH_RELEASE_STORE_PASSWORD \
+            ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_ALIAS \
+            ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required release signing secret: ${name}" >&2
+              exit 1
+            fi
+          done
+          keystore="$RUNNER_TEMP/dsh-release.keystore"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
+          echo "ORG_GRADLE_PROJECT_DSH_RELEASE_STORE_FILE=$keystore" >> "$GITHUB_ENV"
+
+      - name: Build signed Android release APK
+        run: |
+          set -euo pipefail
           chmod +x android/gradlew
-          ./android/gradlew -p android assembleDebug assembleRelease --no-daemon
+          ./android/gradlew -p android assembleRelease --no-daemon
           mkdir -p dist
-          cp android/app/build/outputs/apk/debug/app-debug.apk dist/dsh-mobile-debug.apk
-          if compgen -G "android/app/build/outputs/apk/release/*.apk" > /dev/null; then
-            cp android/app/build/outputs/apk/release/*.apk dist/dsh-mobile-release.apk
+          cp android/app/build/outputs/apk/release/*.apk dist/dsh-mobile.apk
+
+      - name: Verify APK signature is not the public debug certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          if [[ -z "$apksigner" ]]; then
+            echo "apksigner not found" >&2
+            exit 1
           fi
+          "$apksigner" verify --verbose --print-certs dist/dsh-mobile.apk
+          release_cert="$($apksigner verify --print-certs dist/dsh-mobile.apk | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2); exit}')"
+          debug_cert="$(keytool -list -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey 2>/dev/null | awk -F': ' '/SHA256:/ {gsub(":", "", $2); print tolower($2); exit}')"
+          if [[ -z "$release_cert" || -z "$debug_cert" ]]; then
+            echo "Could not determine APK signing certificates" >&2
+            exit 1
+          fi
+          if [[ "$release_cert" == "$debug_cert" ]]; then
+            echo "Release APK is signed with the public debug certificate" >&2
+            exit 1
+          fi
+
+      - name: Generate checksums
+        run: |
           cd dist
-          sha256sum *.apk > SHA256SUMS.txt
+          sha256sum dsh-mobile.apk > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: Upload APKs as Workflow Artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload release artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: dsh-mobile-apks
+          name: dsh-mobile-release
           path: dist/*
-          retention-days: 14
+          retention-days: 5
 
-      - name: Publish to GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+  publish:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build-apk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          files: |
-            dist/dsh-mobile-debug.apk
-            dist/dsh-mobile-release.apk
-            dist/SHA256SUMS.txt
-          generate_release_notes: true
+          name: dsh-mobile-release
+          path: dist
+
+      - name: Refuse to overwrite an existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to overwrite it." >&2
+            exit 1
+          fi
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" dist/dsh-mobile.apk dist/SHA256SUMS.txt --generate-notes --title "$TAG"

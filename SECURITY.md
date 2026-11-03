@@ -23,4 +23,10 @@ The mobile client is designed to:
 
 ## Reporting vulnerabilities
 
-Before a public repository is created, maintainers should configure a private GitHub Security Advisory reporting channel and replace this section with the repository-specific reporting instructions. Do not report exploitable security issues in public Discussions or Issues.
+Please report security vulnerabilities privately using GitHub's **Report a vulnerability** feature in the repository Security tab when available. Do not disclose exploitable vulnerabilities in public Issues or Discussions.
+
+If private vulnerability reporting is unavailable, contact the repository maintainer privately before publishing technical details. Do not include secrets, credentials, private server URLs, or user data in a report.
+
+## Release integrity
+
+Official Android release builds must be signed with the maintainer-controlled release key. Release builds intentionally fail when signing credentials are unavailable; the repository's public debug keystore must never be used to sign distributed releases.
