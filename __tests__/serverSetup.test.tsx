@@ -42,6 +42,14 @@ describe('DSH launch-link onboarding', () => {
     jest.clearAllMocks();
   });
 
+  function findMocks(type: string) {
+    return tree.root.findAll(node => node.type === type);
+  }
+
+  function findMock(type: string) {
+    return tree.root.find(node => node.type === type);
+  }
+
   function render(serverId?: string) {
     const props = {
       navigation: {goBack: mockGoBack, popToTop: mockPopToTop},
@@ -58,7 +66,7 @@ describe('DSH launch-link onboarding', () => {
   }
 
   function press(label: string) {
-    const buttons = tree.root.findAllByType('MockButton');
+    const buttons = findMocks('MockButton');
     const button = buttons.find(item => item.props.label === label);
     expect(button).toBeDefined();
     act(() => button?.props.onPress());
@@ -81,15 +89,15 @@ describe('DSH launch-link onboarding', () => {
 
   it('keeps existing saved profiles on the original editing path', () => {
     render('existing-profile');
-    expect(tree.root.findAllByType('MockServerEditor')).toHaveLength(1);
-    expect(tree.root.findAllByType('MockWebView')).toHaveLength(0);
+    expect(findMocks('MockServerEditor')).toHaveLength(1);
+    expect(findMocks('MockWebView')).toHaveLength(0);
   });
 
   it('never saves a token or accepts a cross-origin redirect', () => {
     render();
     startPairing('https://dsh.example/?token=private-value');
 
-    const webView = tree.root.findByType('MockWebView');
+    const webView = findMock('MockWebView');
     expect(webView.props.source.uri).toBe(
       'https://dsh.example/?token=private-value',
     );
@@ -102,13 +110,13 @@ describe('DSH launch-link onboarding', () => {
     act(() => {
       webView.props.onLoadEnd({nativeEvent: {url: 'https://dsh.example/'}});
     });
-    expect(tree.root.findByType('MockWebView').props.source.uri).toBe(
+    expect(findMock('MockWebView').props.source.uri).toBe(
       'https://dsh.example/',
     );
     expect(mockUpsertServer).not.toHaveBeenCalled();
 
     act(() => {
-      tree.root.findByType('MockWebView').props.onLoadEnd({
+      findMock('MockWebView').props.onLoadEnd({
         nativeEvent: {url: 'https://dsh.example/'},
       });
     });
@@ -127,26 +135,27 @@ describe('DSH launch-link onboarding', () => {
     render();
     startPairing('https://dsh.example/?token=temporary-value');
     act(() => {
-      tree.root.findByType('MockWebView').props.onLoadEnd({
+      findMock('MockWebView').props.onLoadEnd({
         nativeEvent: {url: 'https://dsh.example/'},
       });
     });
     act(() => {
-      tree.root.findByType('MockWebView').props.onHttpError({
+      findMock('MockWebView').props.onHttpError({
         nativeEvent: {statusCode: 401},
       });
     });
-    const webViews = tree.root.findAllByType('MockWebView');
-    const buttons = tree.root.findAllByType('MockButton');
+    const webViews = findMocks('MockWebView');
+    const buttons = findMocks('MockButton');
+    const canSave = buttons.some(item => item.props.label === 'Save server');
     expect(webViews).toHaveLength(0);
-    expect(buttons.some(item => item.props.label === 'Save server')).toBe(false);
+    expect(canSave).toBe(false);
     expect(mockUpsertServer).not.toHaveBeenCalled();
   });
 
   it('rejects cleartext token links to public hosts', () => {
     render();
     startPairing('http://public.example/?token=secret');
-    expect(tree.root.findAllByType('MockWebView')).toHaveLength(0);
+    expect(findMocks('MockWebView')).toHaveLength(0);
     expect(mockUpsertServer).not.toHaveBeenCalled();
   });
 });
