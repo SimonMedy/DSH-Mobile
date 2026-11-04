@@ -7,6 +7,13 @@ const mockUpsertServer = jest.fn();
 const mockGoBack = jest.fn();
 const mockPopToTop = jest.fn();
 
+// Unit-test the React flow without importing NativeWind's untransformed JSX
+// from react-native-css-interop through React Native's View mock.
+jest.mock('react-native', () => ({
+  View: 'MockNativeView',
+  Text: 'MockNativeText',
+  TextInput: 'MockNativeTextInput',
+}));
 jest.mock('../src/app/AppStateProvider', () => ({
   useAppState: () => ({servers: [], upsertServer: mockUpsertServer}),
 }));
