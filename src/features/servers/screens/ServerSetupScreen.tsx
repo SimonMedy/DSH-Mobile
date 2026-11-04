@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useRef, useState} from 'react';
 import {Text, TextInput, View} from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {WebView} from 'react-native-webview';
@@ -9,7 +9,11 @@ import {AppButton} from '../../../shared/components/AppButton';
 import {Screen} from '../../../shared/components/Screen';
 import {decideNavigation} from '../../browser/navigationPolicy';
 import {parseHarnessLaunchLink} from '../launchLink';
-import {normalizeServerUrl} from '../serverUrl';
+import {
+  cleanHarnessRoot,
+  decidePairingLoad,
+  type PairingPhase,
+} from '../pairingFlow';
 import {ServerEditorScreen} from './ServerEditorScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ServerEditor'>;
@@ -78,6 +82,8 @@ function PairLinkScreen({
   const [name, setName] = useState('My Harness');
   const [input, setInput] = useState('');
   const [session, setSession] = useState<PairingSession>();
+  const [phase, setPhase] = useState<PairingPhase>('exchange');
+  const failed = useRef(false);
   const [readyUrl, setReadyUrl] = useState<string>();
   const [error, setError] = useState<string>();
   const inputStyle = {
@@ -94,6 +100,8 @@ function PairLinkScreen({
       setInput('');
       setError(undefined);
       setReadyUrl(undefined);
+      failed.current = false;
+      setPhase('exchange');
       setSession(parsed);
     } catch (caught) {
       setError(
@@ -114,16 +122,34 @@ function PairLinkScreen({
     navigation.popToTop();
   };
 
+  const failPairing = (message: string) => {
+    failed.current = true;
+    setSession(undefined);
+    setReadyUrl(undefined);
+    setInput('');
+    setError(message);
+  };
+
   const handleComplete = (currentUrl: string) => {
-    if (!session) return;
-    try {
-      const url = new URL(currentUrl);
-      if (url.search || url.hash) return;
-      if (normalizeServerUrl(currentUrl) !== session.serverUrl) return;
+    if (!session || failed.current) return;
+    const decision = decidePairingLoad(
+      phase,
+      session.serverUrl,
+      currentUrl,
+    );
+    if (decision === 'verify') {
+      // Drop the bearer token from React state as soon as the clean redirect
+      // arrives. The same WebView makes another request using its session cookie.
+      setPhase('verify');
+      setSession({
+        serverUrl: session.serverUrl,
+        launchUrl: cleanHarnessRoot(session.serverUrl),
+      });
+    } else if (decision === 'ready') {
+      // A clean 2nd load is a necessary smoke test, not proof that every
+      // authenticated upstream API works. Native E2E remains a release gate.
       setReadyUrl(session.serverUrl);
       setSession(undefined);
-    } catch {
-      // about:blank is not a successful pairing response.
     }
   };
 
@@ -157,7 +183,9 @@ function PairLinkScreen({
         {session ? (
           <>
             <Text style={{color: colors.textSecondary}}>
-              Opening the temporary link securely…
+              {phase === 'exchange'
+                ? 'Opening the temporary link securely…'
+                : 'Checking the browser session…'}
             </Text>
             <View style={{flex: 1, overflow: 'hidden', borderRadius: 12}}>
               <WebView
@@ -181,19 +209,19 @@ function PairLinkScreen({
                 onHttpError={event => {
                   const status = event.nativeEvent.statusCode;
                   if (status === 401 || status === 403) {
-                    setError(
+                    failPairing(
                       status === 401
                         ? 'The launch link is invalid or expired. Generate a new one on your server.'
                         : 'Harness rejected the server hostname or origin. Check its trusted-host configuration.',
                     );
-                    setSession(undefined);
+                  } else if (status >= 400) {
+                    failPairing('Harness returned an HTTP error. Check the server and retry.');
                   }
                 }}
                 onError={() => {
-                  setError(
+                  failPairing(
                     'Could not open the server. Check HTTPS, the hostname and your network.',
                   );
-                  setSession(undefined);
                 }}
               />
             </View>
@@ -202,8 +230,8 @@ function PairLinkScreen({
         {readyUrl ? (
           <>
             <Text style={{color: colors.positive, fontWeight: '700'}}>
-              The server returned its clean launch page. Save this server to
-              continue.
+              The server loaded its clean page again. Save the address, then
+              verify your models and settings in the main browser.
             </Text>
             <TextInput
               accessibilityLabel="Server name"
@@ -221,6 +249,7 @@ function PairLinkScreen({
           label={session ? 'Cancel pairing' : 'Back'}
           tone="ghost"
           onPress={() => {
+            failed.current = true;
             setSession(undefined);
             setReadyUrl(undefined);
             setInput('');
