@@ -58,17 +58,17 @@ describe('DSH launch-link onboarding', () => {
   }
 
   function press(label: string) {
-    const button = tree.root
-      .findAllByType('MockButton')
-      .find(item => item.props.label === label);
+    const buttons = tree.root.findAllByType('MockButton');
+    const button = buttons.find(item => item.props.label === label);
     expect(button).toBeDefined();
     act(() => button?.props.onPress());
   }
 
   function fillLaunchLink(value: string) {
-    const field = tree.root
-      .findAllByType(TextInput)
-      .find(item => item.props.accessibilityLabel === 'Private DSH Web launch link');
+    const fields = tree.root.findAllByType(TextInput);
+    const field = fields.find(
+      item => item.props.accessibilityLabel === 'Private DSH Web launch link',
+    );
     expect(field).toBeDefined();
     act(() => field?.props.onChangeText(value));
   }
@@ -93,11 +93,10 @@ describe('DSH launch-link onboarding', () => {
     expect(webView.props.source.uri).toBe(
       'https://dsh.example/?token=private-value',
     );
-    expect(
-      webView.props.onShouldStartLoadWithRequest({
-        url: 'https://untrusted.example/',
-      }),
-    ).toBe(false);
+    const allowed = webView.props.onShouldStartLoadWithRequest({
+      url: 'https://untrusted.example/',
+    });
+    expect(allowed).toBe(false);
     expect(mockUpsertServer).not.toHaveBeenCalled();
 
     act(() => {
@@ -137,8 +136,10 @@ describe('DSH launch-link onboarding', () => {
         nativeEvent: {statusCode: 401},
       });
     });
-    expect(tree.root.findAllByType('MockWebView')).toHaveLength(0);
-    expect(tree.root.findAllByType('MockButton').some(item => item.props.label === 'Save server')).toBe(false);
+    const webViews = tree.root.findAllByType('MockWebView');
+    const buttons = tree.root.findAllByType('MockButton');
+    expect(webViews).toHaveLength(0);
+    expect(buttons.some(item => item.props.label === 'Save server')).toBe(false);
     expect(mockUpsertServer).not.toHaveBeenCalled();
   });
 
