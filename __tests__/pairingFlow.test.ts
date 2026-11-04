@@ -9,7 +9,9 @@ describe('Harness pairing redirect guard', () => {
   const root = 'https://dsh.example/ui/';
 
   it('canonicalizes root and reverse-proxy mount URLs', () => {
-    expect(cleanHarnessRoot('https://dsh.example')).toBe('https://dsh.example/');
+    expect(cleanHarnessRoot('https://dsh.example')).toBe(
+      'https://dsh.example/',
+    );
     expect(cleanHarnessRoot(server)).toBe(root);
     expect(cleanHarnessRoot('http://127.0.0.1:3080')).toBe(
       'http://127.0.0.1:3080/',

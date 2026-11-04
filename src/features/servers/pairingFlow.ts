@@ -6,11 +6,8 @@ import {normalizeServerUrl} from './serverUrl';
  * path, another origin, or any remaining query/fragment as proof of exchange.
  */
 export function cleanHarnessRoot(serverUrl: string): string {
-  const url = new URL(normalizeServerUrl(serverUrl));
-  url.pathname = `${url.pathname.replace(/\/+$/, '')}/`;
-  url.search = '';
-  url.hash = '';
-  return url.toString();
+  const normalized = normalizeServerUrl(serverUrl);
+  return `${normalized.replace(/\/+$/, '')}/`;
 }
 
 export function isCleanHarnessRoot(

@@ -132,11 +132,7 @@ function PairLinkScreen({
 
   const handleComplete = (currentUrl: string) => {
     if (!session || failed.current) return;
-    const decision = decidePairingLoad(
-      phase,
-      session.serverUrl,
-      currentUrl,
-    );
+    const decision = decidePairingLoad(phase, session.serverUrl, currentUrl);
     if (decision === 'verify') {
       // Drop the bearer token from React state as soon as the clean redirect
       // arrives. The same WebView makes another request using its session cookie.
@@ -215,7 +211,9 @@ function PairLinkScreen({
                         : 'Harness rejected the server hostname or origin. Check its trusted-host configuration.',
                     );
                   } else if (status >= 400) {
-                    failPairing('Harness returned an HTTP error. Check the server and retry.');
+                    failPairing(
+                      'Harness returned an HTTP error. Check the server and retry.',
+                    );
                   }
                 }}
                 onError={() => {
