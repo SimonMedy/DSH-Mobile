@@ -15,6 +15,7 @@ import {
   decideNavigation,
   decidePopupNavigation,
 } from '../navigationPolicy';
+import {browserDocumentError} from '../browserHttpError';
 import {INJECTED_POLYFILLS} from '../webviewCrypto';
 
 export function DshBrowserScreen({
@@ -25,6 +26,7 @@ export function DshBrowserScreen({
   const {servers, markConnected, markOffline} = useAppState();
   const server = servers.find(item => item.id === route.params.serverId);
   const webRef = useRef<React.ComponentRef<typeof WebView>>(null);
+  const documentFailed = useRef(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const [loadError, setLoadError] = useState<string>();
   const [reloadKey, setReloadKey] = useState(0);
@@ -77,12 +79,14 @@ export function DshBrowserScreen({
     if (!canOpenExternally(url)) return;
     try {
       await Linking.openURL(url);
-    } catch (error) {
-      console.warn('Could not open external URL', error);
+    } catch {
+      // Native errors can include a sensitive URL; do not write them to logs.
+      console.warn('Could not open external link');
     }
   };
 
   const retry = () => {
+    documentFailed.current = false;
     setLoadError(undefined);
     setLoading(true);
     setCanGoBack(false);
@@ -143,7 +147,7 @@ export function DshBrowserScreen({
             <WifiOff size={30} color={colors.danger} />
           </View>
           <Text style={{color: colors.text, fontSize: 20, fontWeight: '800'}}>
-            Couldn’t reach {server.name}
+            Couldn’t open {server.name}
           </Text>
           <Text
             className="mt-2 text-center"
@@ -215,19 +219,33 @@ export function DshBrowserScreen({
           onContentProcessDidTerminate={retry}
           onRenderProcessGone={retry}
           onLoadStart={() => {
+            documentFailed.current = false;
             setLoading(true);
             setLoadError(undefined);
           }}
           onLoad={() => {
+            if (documentFailed.current) return;
             setLoading(false);
             markConnected(server.id);
           }}
-          onError={(event: {nativeEvent: {description?: string}}) => {
+          onHttpError={event => {
+            const message = browserDocumentError(
+              server.url,
+              event.nativeEvent.url,
+              event.nativeEvent.statusCode,
+            );
+            if (!message) return;
+            documentFailed.current = true;
+            setLoading(false);
+            markOffline(server.id);
+            setLoadError(message);
+          }}
+          onError={() => {
+            documentFailed.current = true;
             setLoading(false);
             markOffline(server.id);
             setLoadError(
-              event.nativeEvent.description ||
-                'Check the server address and your network connection.',
+              'Check the server address, HTTPS certificate and your network connection.',
             );
           }}
         />
