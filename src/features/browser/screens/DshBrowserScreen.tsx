@@ -103,20 +103,23 @@ export function DshBrowserScreen({
         <View className="ml-1 min-w-0 flex-1">
           <View className="flex-row items-center gap-2">
             <View
-              className="h-2 w-2 rounded-full"
-              style={{
-                backgroundColor: loadError
-                  ? colors.danger
-                  : loading
-                    ? colors.warning
-                    : colors.positive,
-              }}
-            />
-            <Text
-              numberOfLines={1}
-              style={{color: colors.text, fontSize: 14.5, fontWeight: '700'}}>
-              {server.name}
-            </Text>
+              className="flex-row items-center gap-2">
+              <View
+                className="h-2 w-2 rounded-full"
+                style={{
+                  backgroundColor: loadError
+                    ? colors.danger
+                    : loading
+                      ? colors.warning
+                      : colors.positive,
+                }}
+              />
+              <Text
+                numberOfLines={1}
+                style={{color: colors.text, fontSize: 14.5, fontWeight: '700'}}>
+                {server.name}
+              </Text>
+            </View>
           </View>
           <Text
             numberOfLines={1}
@@ -147,7 +150,7 @@ export function DshBrowserScreen({
             <WifiOff size={30} color={colors.danger} />
           </View>
           <Text style={{color: colors.text, fontSize: 20, fontWeight: '800'}}>
-            Couldn’t reach {server.name}
+            Couldn’t open {server.name}
           </Text>
           <Text
             className="mt-2 text-center"
@@ -244,7 +247,9 @@ export function DshBrowserScreen({
             documentFailed.current = true;
             setLoading(false);
             markOffline(server.id);
-            setLoadError('Check the server address, HTTPS certificate and your network connection.');
+            setLoadError(
+              'Check the server address, HTTPS certificate and your network connection.',
+            );
           }}
         />
       )}

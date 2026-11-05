@@ -7,7 +7,9 @@ describe('WebView top-level HTTP failures', () => {
   it('explains authentication and trust failures without echoing URLs or credentials', () => {
     expect(browserDocumentError(server, root, 401)).toContain('not authorized');
     expect(browserDocumentError(server, root, 403)).toContain('trusted-host');
-    expect(browserDocumentError(server, root, 431)).toContain('request headers');
+    expect(browserDocumentError(server, root, 431)).toContain(
+      'request headers',
+    );
     expect(browserDocumentError(server, root, 503)).toContain('HTTP 503');
     expect(browserDocumentError(server, root, 200)).toBeUndefined();
   });
@@ -27,6 +29,8 @@ describe('WebView top-level HTTP failures', () => {
   });
 
   it('recognizes the server root without a path prefix', () => {
-    expect(browserDocumentError('https://dsh.example', 'https://dsh.example/', 401)).toContain('not authorized');
+    expect(
+      browserDocumentError('https://dsh.example', 'https://dsh.example/', 401),
+    ).toContain('not authorized');
   });
 });
