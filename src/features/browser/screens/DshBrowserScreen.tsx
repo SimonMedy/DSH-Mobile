@@ -103,23 +103,20 @@ export function DshBrowserScreen({
         <View className="ml-1 min-w-0 flex-1">
           <View className="flex-row items-center gap-2">
             <View
-              className="flex-row items-center gap-2">
-              <View
-                className="h-2 w-2 rounded-full"
-                style={{
-                  backgroundColor: loadError
-                    ? colors.danger
-                    : loading
-                      ? colors.warning
-                      : colors.positive,
-                }}
-              />
-              <Text
-                numberOfLines={1}
-                style={{color: colors.text, fontSize: 14.5, fontWeight: '700'}}>
-                {server.name}
-              </Text>
-            </View>
+              className="h-2 w-2 rounded-full"
+              style={{
+                backgroundColor: loadError
+                  ? colors.danger
+                  : loading
+                    ? colors.warning
+                    : colors.positive,
+              }}
+            />
+            <Text
+              numberOfLines={1}
+              style={{color: colors.text, fontSize: 14.5, fontWeight: '700'}}>
+              {server.name}
+            </Text>
           </View>
           <Text
             numberOfLines={1}
