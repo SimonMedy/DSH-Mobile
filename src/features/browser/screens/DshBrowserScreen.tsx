@@ -24,7 +24,7 @@ export function DshBrowserScreen({
   const {colors} = useAppTheme();
   const {servers, markConnected, markOffline} = useAppState();
   const server = servers.find(item => item.id === route.params.serverId);
-  const webRef = useRef<WebView>(null);
+  const webRef = useRef<React.ComponentRef<typeof WebView>>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [loadError, setLoadError] = useState<string>();
   const [reloadKey, setReloadKey] = useState(0);
