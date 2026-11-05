@@ -10,11 +10,10 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {useAppState} from '../app/AppStateProvider';
 import {useAppTheme} from '../app/ThemeProvider';
 import {DshBrowserScreen} from '../features/browser/screens/DshBrowserScreen';
-import {ServerEditorScreen} from '../features/servers/screens/ServerEditorScreen';
+import {ServerSetupScreen} from '../features/servers/screens/ServerSetupScreen';
 import {ServerListScreen} from '../features/servers/screens/ServerListScreen';
 import {SettingsScreen} from '../features/settings/screens/SettingsScreen';
 import type {RootStackParamList} from './types';
-
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
@@ -22,7 +21,6 @@ export function RootNavigator() {
   const {snapshot, hydrated} = useAppState();
   const {colors, isDark} = useAppTheme();
   const launchHandled = useRef(false);
-
   const handleReady = useCallback(() => {
     if (launchHandled.current) return;
     launchHandled.current = true;
@@ -32,7 +30,6 @@ export function RootNavigator() {
       navigationRef.navigate('Browser', {serverId: server.id});
     }
   }, [snapshot.preferences.launch, snapshot.servers]);
-
   if (!hydrated) {
     return (
       <View
@@ -45,7 +42,6 @@ export function RootNavigator() {
       </View>
     );
   }
-
   const baseTheme = isDark ? DarkTheme : DefaultTheme;
   const navigationTheme = {
     ...baseTheme,
@@ -59,7 +55,6 @@ export function RootNavigator() {
       notification: colors.danger,
     },
   };
-
   return (
     <NavigationContainer
       ref={navigationRef}
@@ -72,7 +67,7 @@ export function RootNavigator() {
           contentStyle: {backgroundColor: colors.background},
         }}>
         <Stack.Screen name="Servers" component={ServerListScreen} />
-        <Stack.Screen name="ServerEditor" component={ServerEditorScreen} />
+        <Stack.Screen name="ServerEditor" component={ServerSetupScreen} />
         <Stack.Screen
           name="Browser"
           component={DshBrowserScreen}
