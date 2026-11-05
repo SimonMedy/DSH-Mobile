@@ -15,32 +15,7 @@ import {
   decideNavigation,
   decidePopupNavigation,
 } from '../navigationPolicy';
-
-const INJECTED_POLYFILLS = `
-(function() {
-  try {
-    if (typeof window !== 'undefined') {
-      if (!window.crypto) {
-        window.crypto = {};
-      }
-      if (!window.crypto.randomUUID) {
-        window.crypto.randomUUID = function() {
-          if (typeof crypto.getRandomValues === 'function') {
-            return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, function(c) {
-              return (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4)).toString(16);
-            });
-          }
-          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            var r = (Math.random() * 16) | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-          });
-        };
-      }
-    }
-  } catch (e) {}
-})();
-true;
-`;
+import {INJECTED_POLYFILLS} from '../webviewCrypto';
 
 export function DshBrowserScreen({
   navigation,
@@ -49,13 +24,12 @@ export function DshBrowserScreen({
   const {colors} = useAppTheme();
   const {servers, markConnected, markOffline} = useAppState();
   const server = servers.find(item => item.id === route.params.serverId);
-  const webRef = useRef<any>(null);
+  const webRef = useRef<React.ComponentRef<typeof WebView>>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [loadError, setLoadError] = useState<string>();
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [browserUri, setBrowserUri] = useState(server?.url ?? 'about:blank');
-
   const goBack = useCallback(() => {
     if (canGoBack) {
       webRef.current?.goBack();
@@ -69,7 +43,6 @@ export function DshBrowserScreen({
       setBrowserUri(server.url);
     }
   }, [server?.url]);
-
   useEffect(() => {
     if (Platform.OS !== 'android') return;
     const subscription = BackHandler.addEventListener(
@@ -81,7 +54,6 @@ export function DshBrowserScreen({
     );
     return () => subscription.remove();
   }, [goBack]);
-
   if (!server) {
     return (
       <Screen>
@@ -101,7 +73,6 @@ export function DshBrowserScreen({
       </Screen>
     );
   }
-
   const openExternal = async (url: string) => {
     if (!canOpenExternally(url)) return;
     try {
@@ -117,7 +88,6 @@ export function DshBrowserScreen({
     setCanGoBack(false);
     setReloadKey(key => key + 1);
   };
-
   return (
     <Screen>
       <View
@@ -165,7 +135,6 @@ export function DshBrowserScreen({
           </IconButton>
         </View>
       </View>
-
       {loadError ? (
         <View className="flex-1 items-center justify-center px-8">
           <View
