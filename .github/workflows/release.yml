@@ -16,11 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    env:
-      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
-      ORG_GRADLE_PROJECT_DSH_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
-      ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
-      ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -39,21 +34,26 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
 
-      - name: Install dependencies
+      - name: Install dependencies without signing credentials
         run: npm ci --no-audit --no-fund
 
       - name: Bootstrap verified Gradle wrapper
         run: npm run native:bootstrap:android
 
-      - name: Configure release signing
+      - name: Configure release signing after dependency installation
         shell: bash
+        env:
+          ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           for name in \
             ANDROID_RELEASE_KEYSTORE_BASE64 \
-            ORG_GRADLE_PROJECT_DSH_RELEASE_STORE_PASSWORD \
-            ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_ALIAS \
-            ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_PASSWORD; do
+            ANDROID_RELEASE_STORE_PASSWORD \
+            ANDROID_RELEASE_KEY_ALIAS \
+            ANDROID_RELEASE_KEY_PASSWORD; do
             if [[ -z "${!name:-}" ]]; then
               echo "Missing required release signing secret: ${name}" >&2
               exit 1
@@ -62,9 +62,14 @@ jobs:
           keystore="$RUNNER_TEMP/dsh-release.keystore"
           printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore"
           chmod 600 "$keystore"
+          keytool -list -storetype PKCS12 -keystore "$keystore" -storepass:env ANDROID_RELEASE_STORE_PASSWORD -alias "$ANDROID_RELEASE_KEY_ALIAS" >/dev/null
           echo "ORG_GRADLE_PROJECT_DSH_RELEASE_STORE_FILE=$keystore" >> "$GITHUB_ENV"
 
       - name: Build signed Android release APK
+        env:
+          ORG_GRADLE_PROJECT_DSH_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           chmod +x android/gradlew
@@ -78,20 +83,24 @@ jobs:
           set -euo pipefail
           apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           if [[ -z "$apksigner" ]]; then
-            echo "apksigner not found" >&2
+            echo 'apksigner not found' >&2
             exit 1
           fi
           "$apksigner" verify --verbose --print-certs dist/dsh-mobile.apk
-          release_cert="$($apksigner verify --print-certs dist/dsh-mobile.apk | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2); exit}')"
-          debug_cert="$(keytool -list -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey 2>/dev/null | awk -F': ' '/SHA256:/ {gsub(":", "", $2); print tolower($2); exit}')"
+          release_cert="$("$apksigner" verify --print-certs dist/dsh-mobile.apk | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2); exit}')"
+          debug_cert="$(keytool -list -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey 2>/dev/null | awk -F': ' '/SHA256:/ {gsub(":", "", $2); gsub(" ", "", $2); print tolower($2); exit}')"
           if [[ -z "$release_cert" || -z "$debug_cert" ]]; then
-            echo "Could not determine APK signing certificates" >&2
+            echo 'Could not determine APK signing certificates' >&2
             exit 1
           fi
           if [[ "$release_cert" == "$debug_cert" ]]; then
-            echo "Release APK is signed with the public debug certificate" >&2
+            echo 'Release APK is signed with the public debug certificate' >&2
             exit 1
           fi
+
+      - name: Erase signing keystore from build runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/dsh-release.keystore"
 
       - name: Generate checksums
         run: |
