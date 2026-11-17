@@ -2,11 +2,6 @@ name: Private Android signing preflight (no publication)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - gpt/signing-preflight-20261117
-    paths:
-      - .github/workflows/signing-preflight.yml
 
 permissions:
   contents: read
