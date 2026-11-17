@@ -20,6 +20,21 @@ assert.ok(release.includes('contents: write'));
 assert.ok(release.includes('needs: build-apk'));
 assert.ok(release.includes('refs/tags/'));
 
+// Signing secrets must not be present during dependency installation.
+const job = release.split('\n  build-apk:\n')[1];
+const buildJob = job?.split('\n  publish:\n')[0];
+assert.ok(buildJob, 'Missing build-apk job');
+const jobHasSecrets = /^    env:/m.test(buildJob);
+assert.ok(!jobHasSecrets, 'Secrets must be scoped to signing steps');
+const bootstrap = buildJob.indexOf('Bootstrap verified Gradle wrapper');
+const signingStep = buildJob.indexOf('Configure release signing');
+assert.ok(bootstrap >= 0 && signingStep > bootstrap);
+const deps = buildJob.includes(
+  'Install dependencies without signing credentials',
+);
+assert.ok(deps);
+assert.ok(buildJob.includes('Erase signing keystore from build runner'));
+
 for (const filename of ['ci.yml', 'release.yml']) {
   const source = readFileSync(`.github/workflows/${filename}`, 'utf8');
   const pins = [...source.matchAll(/^\s*-?\s*uses:\s*[^@\s]+@([^\s#]+)/gm)];
