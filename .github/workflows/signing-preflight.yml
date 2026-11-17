@@ -2,13 +2,6 @@ name: Private Android signing preflight (no publication)
 
 on:
   workflow_dispatch:
-  # Temporary trusted-branch trigger for a single signature-verification test.
-  # Remove this before merging the workflow into main.
-  push:
-    branches:
-      - gpt/signing-preflight-20261117
-    paths:
-      - .github/workflows/signing-preflight.yml
 
 permissions:
   contents: read
