@@ -14,12 +14,7 @@ permissions:
 jobs:
   verify-signing:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    env:
-      ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
-      ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
-      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
-      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+    timeout-minutes: 55
     steps:
       - name: Checkout trusted repository branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -34,36 +29,46 @@ jobs:
           java-version: '17'
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
-      - name: Validate private signing secrets without disclosing them
-        shell: bash
-        run: |
-          set -euo pipefail
-          for variable in ANDROID_RELEASE_KEYSTORE_BASE64 ANDROID_RELEASE_STORE_PASSWORD ANDROID_RELEASE_KEY_ALIAS ANDROID_RELEASE_KEY_PASSWORD; do
-            if [[ -z "${!variable:-}" ]]; then
-              echo "Missing signing secret: $variable" >&2
-              exit 1
-            fi
-          done
-          keystore="$RUNNER_TEMP/dsh-release-preflight.p12"
-          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore"
-          chmod 600 "$keystore"
-          keytool -list -storetype PKCS12 -keystore "$keystore" -storepass:env ANDROID_RELEASE_STORE_PASSWORD -alias "$ANDROID_RELEASE_KEY_ALIAS" >/dev/null
-          echo 'Private signing key and alias can be opened.'
-      - name: Install dependencies and verified Android Gradle wrapper
+      - name: Install dependencies without access to release secrets
         run: |
           npm ci --no-audit --no-fund
           npm run native:bootstrap:android
-      - name: Build a private release APK only for local signature verification
+      - name: Validate secrets, build private APK, and verify signature
         shell: bash
         env:
+          ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
           ORG_GRADLE_PROJECT_DSH_RELEASE_STORE_FILE: ${{ runner.temp }}/dsh-release-preflight.p12
           ORG_GRADLE_PROJECT_DSH_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
           ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
           ORG_GRADLE_PROJECT_DSH_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          keystore="$RUNNER_TEMP/dsh-release-preflight.p12"
+          log="$RUNNER_TEMP/dsh-release-gradle.log"
+          trap 'rm -f "$keystore" "$log"; rm -rf android/app/build/outputs/apk/release' EXIT
+          for variable in ANDROID_RELEASE_KEYSTORE_BASE64 ANDROID_RELEASE_STORE_PASSWORD ANDROID_RELEASE_KEY_ALIAS ANDROID_RELEASE_KEY_PASSWORD; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "Missing signing secret: $variable" >&2
+              exit 1
+            fi
+          done
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
+          keytool -list -storetype PKCS12 -keystore "$keystore" -storepass:env ANDROID_RELEASE_STORE_PASSWORD -alias "$ANDROID_RELEASE_KEY_ALIAS" >/dev/null
+          echo 'The protected signing keystore and alias are valid.'
           chmod +x android/gradlew
-          ./android/gradlew -p android assembleRelease --no-daemon
+          if ! ./android/gradlew -p android assembleRelease --no-daemon --console=plain --max-workers=2 > "$log" 2>&1; then
+            echo 'Release Gradle build failed. Diagnostic categories only; no raw logs or signing values are published.' >&2
+            if grep -q 'Java heap space\|OutOfMemoryError\|Gradle build daemon disappeared' "$log"; then echo 'CATEGORY: memory/resource exhaustion'; fi
+            if grep -q 'Could not resolve\|Read timed out\|Connection reset' "$log"; then echo 'CATEGORY: dependency/network resolution'; fi
+            if grep -q 'bundleReleaseJsAndAssets\|createBundleReleaseJsAndAssets' "$log"; then echo 'CATEGORY: React Native JavaScript bundle'; fi
+            if grep -q 'validateSigningRelease\|packageRelease\|Keystore was tampered\|key password was incorrect' "$log"; then echo 'CATEGORY: Android signing or APK packaging'; fi
+            if grep -q 'minifyReleaseWithR8\|R8:' "$log"; then echo 'CATEGORY: code shrinking/R8'; fi
+            exit 1
+          fi
           apk=android/app/build/outputs/apk/release/app-release.apk
           test -s "$apk"
           apksigner=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
@@ -75,10 +80,4 @@ jobs:
             echo 'Signing identity validation failed.' >&2
             exit 1
           fi
-          echo 'Signed release APK built and verified with a non-debug certificate. No APK published.'
-      - name: Erase temporary keystore and APK on runner
-        if: always()
-        shell: bash
-        run: |
-          rm -f "$RUNNER_TEMP/dsh-release-preflight.p12"
-          rm -rf android/app/build/outputs/apk/release
+          echo 'Private release APK signature verified, and public debug identity rejected. No APK uploaded or published.'
