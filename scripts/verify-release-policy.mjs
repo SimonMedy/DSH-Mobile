@@ -20,6 +20,14 @@ assert.ok(release.includes('contents: write'));
 assert.ok(release.includes('needs: build-apk'));
 assert.ok(release.includes('refs/tags/'));
 
+// An APK signed by a non-debug key is not sufficient: it must match the
+// publisher's configured private certificate, with exactly one signer.
+assert.ok(release.includes('--print-certs-pem'));
+assert.ok(release.includes("pem_count\" != '1'"));
+assert.ok(release.includes('keytool -exportcert -rfc -storetype PKCS12'));
+assert.ok(release.includes('"$apk_cert" != "$expected_cert"'));
+assert.ok(release.includes('"$apk_cert" == "$debug_cert"'));
+
 // Signing secrets must not be present during dependency installation.
 const job = release.split('\n  build-apk:\n')[1];
 const buildJob = job?.split('\n  publish:\n')[0];
