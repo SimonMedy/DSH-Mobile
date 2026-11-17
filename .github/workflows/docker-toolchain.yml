@@ -1,0 +1,29 @@
+name: Docker development toolchain
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - .github/workflows/docker-toolchain.yml
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - .github/workflows/docker-toolchain.yml
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Build development image without remote installer
+        run: docker build --pull --tag dsh-mobile-toolchain:ci .
+      - name: Verify Node, Java and Android SDK tools
+        run: |
+          docker run --rm dsh-mobile-toolchain:ci node --version
+          docker run --rm dsh-mobile-toolchain:ci java -version
+          docker run --rm dsh-mobile-toolchain:ci sdkmanager --version

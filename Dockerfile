@@ -1,30 +1,30 @@
-FROM eclipse-temurin:17-jdk-jammy
+# Use the official versioned Node distribution rather than executing an
+# unaudited remote shell installer with root privileges.
+FROM node:24.19.0-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV ANDROID_HOME=/opt/android-sdk
 ENV ANDROID_SDK_ROOT=/opt/android-sdk
-ENV PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+ENV PATH=$PATH:$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
 
-# 1. Install system utilities and Node.js 24 LTS
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-17-jdk-headless \
     curl \
     unzip \
     git \
     build-essential \
     ca-certificates \
-    && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Download and configure Android SDK Command-line Tools
+# Official Android command-line tools archive, versioned rather than latest.
 RUN mkdir -p ${ANDROID_HOME}/cmdline-tools \
     && curl -fsSL -o /tmp/cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
     && unzip -q /tmp/cmdline-tools.zip -d ${ANDROID_HOME}/cmdline-tools \
     && mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest \
     && rm /tmp/cmdline-tools.zip
 
-# 3. Accept Android licenses & install required SDK platforms and build-tools
 RUN yes | sdkmanager --licenses > /dev/null \
     && sdkmanager \
         "platform-tools" \
@@ -34,5 +34,4 @@ RUN yes | sdkmanager --licenses > /dev/null \
 
 WORKDIR /app
 
-# 4. Default command
 CMD ["npm", "run", "check"]
