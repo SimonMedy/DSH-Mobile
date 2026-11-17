@@ -49,13 +49,29 @@ jobs:
           curl --fail http://127.0.0.1:3080/__fixture/status
           curl --fail http://127.0.0.1:8081/status
       - name: Start API 35 emulator
+        shell: bash
         run: |
+          set -euo pipefail
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64'
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n dsh-e2e -k 'system-images;android-35;google_apis;x86_64' --force
-          nohup "$ANDROID_HOME/emulator/emulator" -avd dsh-e2e -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot >e2e-artifacts/emulator.log 2>&1 &
+          sdkmanager_bin="$(command -v sdkmanager || true)"
+          avdmanager_bin="$(command -v avdmanager || true)"
+          emulator_bin="$(command -v emulator || true)"
+          if [[ -z "$sdkmanager_bin" ]]; then
+            sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          fi
+          if [[ -z "$avdmanager_bin" ]]; then
+            avdmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -name avdmanager | head -n 1)"
+          fi
+          if [[ -z "$emulator_bin" ]]; then
+            emulator_bin="$ANDROID_HOME/emulator/emulator"
+          fi
+          test -x "$sdkmanager_bin"
+          test -x "$avdmanager_bin"
+          "$sdkmanager_bin" --sdk_root="$ANDROID_HOME" 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64'
+          echo no | "$avdmanager_bin" create avd -n dsh-e2e -k 'system-images;android-35;google_apis;x86_64' --force
+          nohup "$emulator_bin" -avd dsh-e2e -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot >e2e-artifacts/emulator.log 2>&1 &
           adb wait-for-device
           for i in $(seq 1 120); do
             if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = '1' ]; then break; fi
