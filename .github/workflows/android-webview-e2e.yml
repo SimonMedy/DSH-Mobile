@@ -1,0 +1,84 @@
+name: Android WebView pairing E2E
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'android/**'
+      - 'scripts/e2e-android-pairing.py'
+      - 'scripts/fixtures/**'
+      - '.github/workflows/android-webview-e2e.yml'
+      - 'package*.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pairing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24.19.0'
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+      - run: npm ci --no-audit --no-fund
+      - run: npm run native:bootstrap:android
+      - name: Build debug APK (never used for release)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p e2e-artifacts
+          if ! ./android/gradlew -p android assembleDebug --no-daemon --console=plain >e2e-artifacts/android-build.log 2>&1; then
+            echo 'Debug APK build failed; last 70 lines follow.'
+            tail -n 70 e2e-artifacts/android-build.log
+            exit 1
+          fi
+          test -s android/app/build/outputs/apk/debug/app-debug.apk
+          echo 'Debug APK built successfully.'
+      - name: Start loopback-only auth fixture and Metro
+        run: |
+          node scripts/fixtures/harness-auth-fixture.mjs >e2e-artifacts/fixture.log 2>&1 &
+          npm start -- --reset-cache >e2e-artifacts/metro.log 2>&1 &
+          for i in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:3080/__fixture/status >/dev/null && curl --fail --silent http://127.0.0.1:8081/status >/dev/null; then break; fi
+            sleep 2
+          done
+          curl --fail --silent http://127.0.0.1:3080/__fixture/status >/dev/null
+          curl --fail --silent http://127.0.0.1:8081/status >/dev/null
+      - name: Enable KVM for hardware-accelerated emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android 35 emulator — exercise full pairing and cookie reuse
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7_pro
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            python3 scripts/e2e-android-pairing.py
+      - name: Preserve E2E diagnostics (fixture credentials only)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-pairing-e2e
+          path: e2e-artifacts/
+          if-no-files-found: ignore
+          retention-days: 5
