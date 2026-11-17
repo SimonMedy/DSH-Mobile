@@ -34,12 +34,19 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run native:bootstrap:android
       - name: Build debug APK (never used for release)
+        shell: bash
         run: |
-          chmod +x android/gradlew
-          ./android/gradlew -p android assembleDebug --no-daemon
+          set -euo pipefail
+          mkdir -p e2e-artifacts
+          if ! ./android/gradlew -p android assembleDebug --no-daemon --console=plain >e2e-artifacts/android-build.log 2>&1; then
+            echo 'Debug APK build failed; last 70 lines follow.'
+            tail -n 70 e2e-artifacts/android-build.log
+            exit 1
+          fi
+          test -s android/app/build/outputs/apk/debug/app-debug.apk
+          echo 'Debug APK built successfully.'
       - name: Start loopback-only auth fixture and Metro
         run: |
-          mkdir -p e2e-artifacts
           node scripts/fixtures/harness-auth-fixture.mjs >e2e-artifacts/fixture.log 2>&1 &
           npm start -- --reset-cache >e2e-artifacts/metro.log 2>&1 &
           for i in $(seq 1 45); do
