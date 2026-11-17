@@ -33,11 +33,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
       - run: npm ci --no-audit --no-fund
       - run: npm run native:bootstrap:android
-      - name: Build debug APK
+      - name: Build debug APK (never used for release)
         run: |
           chmod +x android/gradlew
           ./android/gradlew -p android assembleDebug --no-daemon
-      - name: Start local authentication fixture and Metro
+      - name: Start loopback-only auth fixture and Metro
         run: |
           mkdir -p e2e-artifacts
           node scripts/fixtures/harness-auth-fixture.mjs >e2e-artifacts/fixture.log 2>&1 &
@@ -46,46 +46,28 @@ jobs:
             if curl --fail --silent http://127.0.0.1:3080/__fixture/status >/dev/null && curl --fail --silent http://127.0.0.1:8081/status >/dev/null; then break; fi
             sleep 2
           done
-          curl --fail http://127.0.0.1:3080/__fixture/status
-          curl --fail http://127.0.0.1:8081/status
-      - name: Start API 35 emulator
-        shell: bash
+          curl --fail --silent http://127.0.0.1:3080/__fixture/status >/dev/null
+          curl --fail --silent http://127.0.0.1:8081/status >/dev/null
+      - name: Enable KVM for hardware-accelerated emulator
         run: |
-          set -euo pipefail
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          sdkmanager_bin="$(command -v sdkmanager || true)"
-          avdmanager_bin="$(command -v avdmanager || true)"
-          emulator_bin="$(command -v emulator || true)"
-          if [[ -z "$sdkmanager_bin" ]]; then
-            sdkmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
-          fi
-          if [[ -z "$avdmanager_bin" ]]; then
-            avdmanager_bin="$(find "$ANDROID_HOME/cmdline-tools" -type f -name avdmanager | head -n 1)"
-          fi
-          if [[ -z "$emulator_bin" ]]; then
-            emulator_bin="$ANDROID_HOME/emulator/emulator"
-          fi
-          test -x "$sdkmanager_bin"
-          test -x "$avdmanager_bin"
-          "$sdkmanager_bin" --sdk_root="$ANDROID_HOME" 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64'
-          echo no | "$avdmanager_bin" create avd -n dsh-e2e -k 'system-images;android-35;google_apis;x86_64' --force
-          nohup "$emulator_bin" -avd dsh-e2e -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot >e2e-artifacts/emulator.log 2>&1 &
-          adb wait-for-device
-          for i in $(seq 1 120); do
-            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = '1' ]; then break; fi
-            sleep 3
-          done
-          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = '1'
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
-      - name: Install and exercise pairing on emulator
-        run: |
-          adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-          python3 scripts/e2e-android-pairing.py
-      - name: Preserve redacted E2E logs and screenshots
+      - name: Android 35 emulator — exercise full pairing and cookie reuse
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7_pro
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            python3 scripts/e2e-android-pairing.py
+      - name: Preserve E2E diagnostics (fixture credentials only)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
