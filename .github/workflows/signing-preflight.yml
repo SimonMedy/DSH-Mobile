@@ -2,6 +2,13 @@ name: Private Android signing preflight (no publication)
 
 on:
   workflow_dispatch:
+  # Temporary trusted-branch trigger for a single signature-verification test.
+  # Remove this before merging the workflow into main.
+  push:
+    branches:
+      - gpt/signing-preflight-20261117
+    paths:
+      - .github/workflows/signing-preflight.yml
 
 permissions:
   contents: read
@@ -69,7 +76,10 @@ jobs:
           apksigner=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
           test -n "$apksigner"
           "$apksigner" verify --verbose "$apk" >/dev/null
-          apk_cert=$("$apksigner" verify --print-certs "$apk" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2); exit}')
+          pem_certs=$("$apksigner" verify --print-certs-pem "$apk")
+          pem_count=$(printf '%s\n' "$pem_certs" | grep -c -- '-----BEGIN CERTIFICATE-----' || true)
+          if [[ "$pem_count" != '1' ]]; then echo 'Expected exactly one APK signing certificate.' >&2; exit 1; fi
+          apk_cert=$(printf '%s\n' "$pem_certs" | openssl x509 -noout -fingerprint -sha256 | awk -F= '{gsub(":", "", $2); print tolower($2)}')
           expected_cert=$(keytool -exportcert -rfc -storetype PKCS12 -keystore "$keystore" -storepass:env ANDROID_RELEASE_STORE_PASSWORD -alias "$ANDROID_RELEASE_KEY_ALIAS" | openssl x509 -noout -fingerprint -sha256 | awk -F= '{gsub(":", "", $2); print tolower($2)}')
           debug_cert=$(keytool -exportcert -rfc -keystore android/app/debug.keystore -storepass android -alias androiddebugkey | openssl x509 -noout -fingerprint -sha256 | awk -F= '{gsub(":", "", $2); print tolower($2)}')
           if [[ -z "$apk_cert" ]]; then echo 'APK signing certificate could not be read.' >&2; exit 1; fi
@@ -77,4 +87,4 @@ jobs:
           if [[ -z "$debug_cert" ]]; then echo 'Public debug certificate could not be read.' >&2; exit 1; fi
           if [[ "$apk_cert" != "$expected_cert" ]]; then echo 'APK signer does not match configured private key.' >&2; exit 1; fi
           if [[ "$apk_cert" == "$debug_cert" ]]; then echo 'APK uses the public debug key.' >&2; exit 1; fi
-          echo 'PASS: signed APK matches the private certificate and differs from debug. No artifact or release published.'
+          echo 'PASS: APK matches the private certificate and differs from debug; nothing was published.'
