@@ -1,7 +1,6 @@
 import {createServer} from 'node:http';
 
-// Minimal local Harness browser-auth contract, NOT a replacement for testing
-// an actual upstream release. Only reachable through adb reverse in CI.
+// Local auth protocol fixture only. It is not a full Harness implementation.
 const port = 3080;
 const token = 'fixture-only-test-token';
 const cookieName = 'dsh-auth-fixture';
@@ -10,10 +9,7 @@ const stats = {tokenExchanges: 0, cookieLoads: 0, denied: 0};
 createServer((req, res) => {
   const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
   if (url.pathname === '/__fixture/status') {
-    res.writeHead(200, {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-store',
-    });
+    res.writeHead(200, {'Content-Type': 'application/json'});
     res.end(JSON.stringify(stats));
     return;
   }
@@ -22,7 +18,8 @@ createServer((req, res) => {
     res.end();
     return;
   }
-  if (url.searchParams.size === 1 && url.searchParams.get('token') === token) {
+  const validToken = url.searchParams.get('token') === token;
+  if (url.searchParams.size === 1 && validToken) {
     stats.tokenExchanges += 1;
     res.writeHead(303, {
       'Set-Cookie': `${cookieName}=yes; Path=/; HttpOnly; SameSite=Strict`,
@@ -32,24 +29,19 @@ createServer((req, res) => {
     res.end();
     return;
   }
-  if (
-    req.headers.cookie
-      ?.split(';')
-      .some(item => item.trim() === `${cookieName}=yes`)
-  ) {
+  const cookies = (req.headers.cookie ?? '').split(';');
+  const hasCookie = cookies.some(item => item.trim() === `${cookieName}=yes`);
+  if (hasCookie) {
     stats.cookieLoads += 1;
     res.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
-      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
     });
-    res.end(
-      '<!doctype html><html><body><h1>HARNESS_AUTHENTICATED_FIXTURE</h1><p>Cookie accepted.</p></body></html>',
-    );
+    res.end('<h1>HARNESS_AUTHENTICATED_FIXTURE</h1>');
     return;
   }
   stats.denied += 1;
-  res.writeHead(401, {'Content-Type': 'text/plain', 'Cache-Control': 'no-store'});
+  res.writeHead(401, {'Content-Type': 'text/plain'});
   res.end('Authentication required');
 }).listen(port, '127.0.0.1', () => {
   console.log('Harness auth fixture listening on 127.0.0.1:3080');
