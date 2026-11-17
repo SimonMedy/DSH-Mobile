@@ -77,8 +77,11 @@ jobs:
           mkdir -p dist
           cp android/app/build/outputs/apk/release/*.apk dist/dsh-mobile.apk
 
-      - name: Verify APK signature is not the public debug certificate
+      - name: Verify APK against the configured private signing certificate
         shell: bash
+        env:
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
         run: |
           set -euo pipefail
           apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
@@ -86,17 +89,30 @@ jobs:
             echo 'apksigner not found' >&2
             exit 1
           fi
-          "$apksigner" verify --verbose --print-certs dist/dsh-mobile.apk
-          release_cert="$("$apksigner" verify --print-certs dist/dsh-mobile.apk | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2); exit}')"
-          debug_cert="$(keytool -list -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey 2>/dev/null | awk -F': ' '/SHA256:/ {gsub(":", "", $2); gsub(" ", "", $2); print tolower($2); exit}')"
-          if [[ -z "$release_cert" || -z "$debug_cert" ]]; then
+          apk=dist/dsh-mobile.apk
+          "$apksigner" verify --verbose "$apk" >/dev/null
+          pem_certs="$("$apksigner" verify --print-certs-pem "$apk")"
+          pem_count="$(printf '%s\n' "$pem_certs" | grep -c -- '-----BEGIN CERTIFICATE-----' || true)"
+          if [[ "$pem_count" != '1' ]]; then
+            echo 'Expected exactly one APK signing certificate' >&2
+            exit 1
+          fi
+          release_cert="$(printf '%s\n' "$pem_certs" | openssl x509 -noout -fingerprint -sha256 | awk -F= '{gsub(":", "", $2); print tolower($2)}')"
+          expected_cert="$(keytool -exportcert -rfc -storetype PKCS12 -keystore "$RUNNER_TEMP/dsh-release.keystore" -storepass:env ANDROID_RELEASE_STORE_PASSWORD -alias "$ANDROID_RELEASE_KEY_ALIAS" | openssl x509 -noout -fingerprint -sha256 | awk -F= '{gsub(":", "", $2); print tolower($2)}')"
+          debug_cert="$(keytool -exportcert -rfc -keystore android/app/debug.keystore -storepass android -alias androiddebugkey | openssl x509 -noout -fingerprint -sha256 | awk -F= '{gsub(":", "", $2); print tolower($2)}')"
+          if [[ -z "$release_cert" || -z "$expected_cert" || -z "$debug_cert" ]]; then
             echo 'Could not determine APK signing certificates' >&2
+            exit 1
+          fi
+          if [[ "$release_cert" != "$expected_cert" ]]; then
+            echo 'Release APK does not match the configured private key' >&2
             exit 1
           fi
           if [[ "$release_cert" == "$debug_cert" ]]; then
             echo 'Release APK is signed with the public debug certificate' >&2
             exit 1
           fi
+          echo 'Release APK signer matches the protected private key, not the public debug key.'
 
       - name: Erase signing keystore from build runner
         if: always()
