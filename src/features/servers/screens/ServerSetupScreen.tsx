@@ -134,16 +134,17 @@ function PairLinkScreen({
     if (!session || failed.current) return;
     const decision = decidePairingLoad(phase, session.serverUrl, currentUrl);
     if (decision === 'verify') {
-      // Drop the bearer token from React state as soon as the clean redirect
-      // arrives. The same WebView makes another request using its session cookie.
+      // A redirect does not prove that an independent WebView can use the
+      // HttpOnly cookie. Drop the bearer URL and remount with a clean root.
+      // The phase is also the WebView key, forcing a real second navigation.
       setPhase('verify');
       setSession({
         serverUrl: session.serverUrl,
         launchUrl: cleanHarnessRoot(session.serverUrl),
       });
     } else if (decision === 'ready') {
-      // A clean 2nd load is a necessary smoke test, not proof that every
-      // authenticated upstream API works. Native E2E remains a release gate.
+      // Successful reload is only a cookie smoke test. Authenticated models,
+      // settings, workspaces and WebSockets still need integration coverage.
       setReadyUrl(session.serverUrl);
       setSession(undefined);
     }
@@ -185,11 +186,13 @@ function PairLinkScreen({
             </Text>
             <View style={{flex: 1, overflow: 'hidden', borderRadius: 12}}>
               <WebView
+                key={phase}
                 source={{uri: session.launchUrl}}
                 originWhitelist={['*']}
                 javaScriptEnabled
                 domStorageEnabled
                 sharedCookiesEnabled
+                cacheEnabled={false}
                 thirdPartyCookiesEnabled={false}
                 allowFileAccess={false}
                 allowFileAccessFromFileURLs={false}
