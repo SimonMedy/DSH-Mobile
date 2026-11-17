@@ -29,7 +29,9 @@ assert.ok(!jobHasSecrets, 'Secrets must be scoped to signing steps');
 const bootstrap = buildJob.indexOf('Bootstrap verified Gradle wrapper');
 const signingStep = buildJob.indexOf('Configure release signing');
 assert.ok(bootstrap >= 0 && signingStep > bootstrap);
-const deps = buildJob.includes('Install dependencies without signing credentials');
+const deps = buildJob.includes(
+  'Install dependencies without signing credentials',
+);
 assert.ok(deps);
 assert.ok(buildJob.includes('Erase signing keystore from build runner'));
 
