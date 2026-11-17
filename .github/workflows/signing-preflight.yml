@@ -33,7 +33,7 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm run native:bootstrap:android
-      - name: Validate secrets, build private APK, and verify signature
+      - name: Validate keystore, build signed APK and compare signing identity
         shell: bash
         env:
           ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
@@ -49,24 +49,24 @@ jobs:
           keystore="$RUNNER_TEMP/dsh-release-preflight.p12"
           log="$RUNNER_TEMP/dsh-release-gradle.log"
           trap 'rm -f "$keystore" "$log"; rm -rf android/app/build/outputs/apk/release' EXIT
-          for variable in ANDROID_RELEASE_KEYSTORE_BASE64 ANDROID_RELEASE_STORE_PASSWORD ANDROID_RELEASE_KEY_ALIAS ANDROID_RELEASE_KEY_PASSWORD; do
-            if [[ -z "${!variable:-}" ]]; then
-              echo "Missing signing secret: $variable" >&2
+          for name in ANDROID_RELEASE_KEYSTORE_BASE64 ANDROID_RELEASE_STORE_PASSWORD ANDROID_RELEASE_KEY_ALIAS ANDROID_RELEASE_KEY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing signing secret: $name" >&2
               exit 1
             fi
           done
           printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore"
           chmod 600 "$keystore"
           keytool -list -storetype PKCS12 -keystore "$keystore" -storepass:env ANDROID_RELEASE_STORE_PASSWORD -alias "$ANDROID_RELEASE_KEY_ALIAS" >/dev/null
-          echo 'The protected signing keystore and alias are valid.'
+          echo 'Private keystore and alias validated.'
           chmod +x android/gradlew
           if ! ./android/gradlew -p android assembleRelease --no-daemon --console=plain --max-workers=2 > "$log" 2>&1; then
-            echo 'Release Gradle build failed. Diagnostic categories only; no raw logs or signing values are published.' >&2
+            echo 'Release build failed; raw logs remain private on this ephemeral runner.' >&2
             if grep -q 'Java heap space\|OutOfMemoryError\|Gradle build daemon disappeared' "$log"; then echo 'CATEGORY: memory/resource exhaustion'; fi
             if grep -q 'Could not resolve\|Read timed out\|Connection reset' "$log"; then echo 'CATEGORY: dependency/network resolution'; fi
-            if grep -q 'bundleReleaseJsAndAssets\|createBundleReleaseJsAndAssets' "$log"; then echo 'CATEGORY: React Native JavaScript bundle'; fi
-            if grep -q 'validateSigningRelease\|packageRelease\|Keystore was tampered\|key password was incorrect' "$log"; then echo 'CATEGORY: Android signing or APK packaging'; fi
-            if grep -q 'minifyReleaseWithR8\|R8:' "$log"; then echo 'CATEGORY: code shrinking/R8'; fi
+            if grep -q 'bundleReleaseJsAndAssets\|createBundleReleaseJsAndAssets' "$log"; then echo 'CATEGORY: React Native bundle'; fi
+            if grep -q 'validateSigningRelease\|packageRelease\|Keystore was tampered\|key password was incorrect' "$log"; then echo 'CATEGORY: signing or packaging'; fi
+            if grep -q 'minifyReleaseWithR8\|R8:' "$log"; then echo 'CATEGORY: R8'; fi
             exit 1
           fi
           apk=android/app/build/outputs/apk/release/app-release.apk
@@ -74,10 +74,12 @@ jobs:
           apksigner=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
           test -n "$apksigner"
           "$apksigner" verify --verbose "$apk" >/dev/null
-          release_cert=$("$apksigner" verify --print-certs "$apk" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2); exit}')
-          debug_cert=$(keytool -list -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey 2>/dev/null | awk -F': ' '/SHA256:/ {gsub(":", "", $2); gsub(" ", "", $2); print tolower($2); exit}')
-          if [[ -z "$release_cert" || -z "$debug_cert" || "$release_cert" == "$debug_cert" ]]; then
-            echo 'Signing identity validation failed.' >&2
-            exit 1
-          fi
-          echo 'Private release APK signature verified, and public debug identity rejected. No APK uploaded or published.'
+          apk_cert=$("$apksigner" verify --print-certs "$apk" | awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2); exit}')
+          expected_cert=$(keytool -exportcert -rfc -storetype PKCS12 -keystore "$keystore" -storepass:env ANDROID_RELEASE_STORE_PASSWORD -alias "$ANDROID_RELEASE_KEY_ALIAS" | openssl x509 -noout -fingerprint -sha256 | awk -F= '{gsub(":", "", $2); print tolower($2)}')
+          debug_cert=$(keytool -exportcert -rfc -keystore android/app/debug.keystore -storepass android -alias androiddebugkey | openssl x509 -noout -fingerprint -sha256 | awk -F= '{gsub(":", "", $2); print tolower($2)}')
+          if [[ -z "$apk_cert" ]]; then echo 'APK signing certificate could not be read.' >&2; exit 1; fi
+          if [[ -z "$expected_cert" ]]; then echo 'Configured private certificate could not be read.' >&2; exit 1; fi
+          if [[ -z "$debug_cert" ]]; then echo 'Public debug certificate could not be read.' >&2; exit 1; fi
+          if [[ "$apk_cert" != "$expected_cert" ]]; then echo 'APK signer does not match configured private key.' >&2; exit 1; fi
+          if [[ "$apk_cert" == "$debug_cert" ]]; then echo 'APK uses the public debug key.' >&2; exit 1; fi
+          echo 'PASS: signed APK matches the private certificate and differs from debug. No artifact or release published.'
