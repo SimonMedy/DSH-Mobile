@@ -1,0 +1,79 @@
+name: Android WebView pairing E2E
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'android/**'
+      - 'scripts/e2e-android-pairing.py'
+      - 'scripts/fixtures/**'
+      - '.github/workflows/android-webview-e2e.yml'
+      - 'package*.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pairing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24.19.0'
+      - uses: actions/setup-java@b2effb05e454b25005698d91606bdc6ffcbf9561 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+      - run: npm ci --no-audit --no-fund
+      - run: npm run native:bootstrap:android
+      - name: Build debug APK
+        run: |
+          chmod +x android/gradlew
+          ./android/gradlew -p android assembleDebug --no-daemon
+      - name: Start local authentication fixture and Metro
+        run: |
+          mkdir -p e2e-artifacts
+          node scripts/fixtures/harness-auth-fixture.mjs >e2e-artifacts/fixture.log 2>&1 &
+          npm start -- --reset-cache >e2e-artifacts/metro.log 2>&1 &
+          for i in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:3080/__fixture/status >/dev/null && curl --fail --silent http://127.0.0.1:8081/status >/dev/null; then break; fi
+            sleep 2
+          done
+          curl --fail http://127.0.0.1:3080/__fixture/status
+          curl --fail http://127.0.0.1:8081/status
+      - name: Start API 35 emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64'
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n dsh-e2e -k 'system-images;android-35;google_apis;x86_64' --force
+          nohup "$ANDROID_HOME/emulator/emulator" -avd dsh-e2e -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot >e2e-artifacts/emulator.log 2>&1 &
+          adb wait-for-device
+          for i in $(seq 1 120); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = '1' ]; then break; fi
+            sleep 3
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = '1'
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+      - name: Install and exercise pairing on emulator
+        run: |
+          adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+          python3 scripts/e2e-android-pairing.py
+      - name: Preserve redacted E2E logs and screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-pairing-e2e
+          path: e2e-artifacts/
+          if-no-files-found: ignore
+          retention-days: 5
