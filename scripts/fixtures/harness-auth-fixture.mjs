@@ -10,7 +10,10 @@ const stats = {tokenExchanges: 0, cookieLoads: 0, denied: 0};
 createServer((req, res) => {
   const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
   if (url.pathname === '/__fixture/status') {
-    res.writeHead(200, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'});
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+    });
     res.end(JSON.stringify(stats));
     return;
   }
@@ -29,14 +32,20 @@ createServer((req, res) => {
     res.end();
     return;
   }
-  if (req.headers.cookie?.split(';').some(item => item.trim() === `${cookieName}=yes`)) {
+  if (
+    req.headers.cookie
+      ?.split(';')
+      .some(item => item.trim() === `${cookieName}=yes`)
+  ) {
     stats.cookieLoads += 1;
     res.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
       'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
     });
-    res.end('<!doctype html><html><body><h1>HARNESS_AUTHENTICATED_FIXTURE</h1><p>Cookie accepted.</p></body></html>');
+    res.end(
+      '<!doctype html><html><body><h1>HARNESS_AUTHENTICATED_FIXTURE</h1><p>Cookie accepted.</p></body></html>',
+    );
     return;
   }
   stats.denied += 1;
