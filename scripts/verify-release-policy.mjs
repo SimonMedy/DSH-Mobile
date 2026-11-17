@@ -20,6 +20,23 @@ assert.ok(release.includes('contents: write'));
 assert.ok(release.includes('needs: build-apk'));
 assert.ok(release.includes('refs/tags/'));
 
+// Signing secrets must never be present during checkout, dependency installation,
+// or the other pre-signing setup steps. Check the job-level YAML indentation.
+const buildJob = release.split('\n  build-apk:\n')[1]?.split('\n  publish:\n')[0];
+assert.ok(buildJob, 'The APK build job is missing');
+assert.doesNotMatch(
+  buildJob,
+  /^    env:/m,
+  'Release signing credentials must not be defined at the build job level',
+);
+assert.ok(buildJob.includes('Install dependencies without signing credentials'));
+assert.ok(
+  buildJob.indexOf('Bootstrap verified Gradle wrapper') <
+    buildJob.indexOf('Configure release signing after dependency installation'),
+  'Do not expose the signing keystore before dependency installation',
+);
+assert.ok(buildJob.includes('Erase signing keystore from build runner'));
+
 for (const filename of ['ci.yml', 'release.yml']) {
   const source = readFileSync(`.github/workflows/${filename}`, 'utf8');
   const pins = [...source.matchAll(/^\s*-?\s*uses:\s*[^@\s]+@([^\s#]+)/gm)];
