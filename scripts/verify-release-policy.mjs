@@ -35,6 +35,12 @@ const deps = buildJob.includes(
 assert.ok(deps);
 assert.ok(buildJob.includes('Erase signing keystore from build runner'));
 
+// The release must match the actual private certificate. A certificate that
+// merely differs from debug is insufficient to prove the publisher identity.
+assert.ok(release.includes('--print-certs-pem'));
+assert.ok(release.includes('keytool -exportcert -rfc -storetype PKCS12'));
+assert.ok(release.includes('release_cert" != "$expected_cert'));
+
 for (const filename of ['ci.yml', 'release.yml']) {
   const source = readFileSync(`.github/workflows/${filename}`, 'utf8');
   const pins = [...source.matchAll(/^\s*-?\s*uses:\s*[^@\s]+@([^\s#]+)/gm)];
